@@ -81,7 +81,8 @@ export const setupApi = async () => {
 export const startApi = async ({ host, port }: { host: string; port: number }) => {
   httpLogger.info('Starting API', { env: config.environment });
   await setupApi();
-  return bindApi.listen({ hostname: host, port }, ({ port: p }) => {
+  const app = createApp();
+  return app.listen({ hostname: host, port }, ({ port: p }) => {
     httpLogger.info('API listening', { host, port: p, env: config.environment });
   });
 };

@@ -3,6 +3,8 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": ".",
+    "declaration": false,
+    "declarationMap": false,
     "paths": {
       "@api/*": ["./src/*"],
       "@core/*": ["./src/modules/core/*"]
