@@ -17,6 +17,9 @@ export const config = {
   web: {
     publicUrl: env.WEB_PUBLIC_URL ?? 'http://localhost:5173',
   },
+  database: {
+    path: env.DATABASE_PATH ?? './data/bind.db',
+  },
 };
 
 export type Config = typeof config;
