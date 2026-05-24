@@ -1,0 +1,12 @@
+{
+  "name": "@bind/api",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "build": "bun run build:sdk",
+    "build:sdk": "echo 'sdk placeholder'",
+    "dev": "echo 'api dev placeholder'",
+    "typecheck": "tsc --noEmit"
+  }
+}

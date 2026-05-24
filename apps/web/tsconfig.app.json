@@ -1,0 +1,7 @@
+{
+  "extends": "@bind/tsconfig/react-library.json",
+  "compilerOptions": {
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "vite.config.ts", "env-loader.ts"]
+}
