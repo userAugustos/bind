@@ -59,3 +59,24 @@ export const documentAnalyses = sqliteTable('document_analyses', {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
+
+export const policyCheckResults = sqliteTable('policy_check_results', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  caseId: text('case_id')
+    .notNull()
+    .references(() => reviewCases.id, { onDelete: 'restrict' }),
+  requirementsDocumentId: text('requirements_document_id')
+    .notNull()
+    .references(() => documents.id, { onDelete: 'cascade' }),
+  targetDocumentId: text('target_document_id')
+    .notNull()
+    .references(() => documents.id, { onDelete: 'cascade' }),
+  targetDocumentType: text('target_document_type').notNull(),
+  results: text('results').notNull(),
+  summaryCounts: text('summary_counts').notNull(),
+  createdAt: text('created_at')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});

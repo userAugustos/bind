@@ -27,6 +27,10 @@
     "./analysis": {
       "types": "./dist/analysis.d.ts",
       "import": "./dist/analysis.js"
+    },
+    "./policy-check": {
+      "types": "./dist/policy-check.d.ts",
+      "import": "./dist/policy-check.js"
     }
   },
   "scripts": {

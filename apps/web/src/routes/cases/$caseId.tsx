@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import type { AnalysisResponse } from '@bind/api/analysis';
 import type { DocumentResponseType, DocumentType } from '@bind/api/documents';
+import type { CheckResultItem, CheckVerdict, PolicyCheckResponse } from '@bind/api/policy-check';
 import type { CaseEvent, CaseResponseType } from '@bind/api/review-cases';
 
 import { Badge } from '@repo/ui/shadcn/badge';
@@ -29,6 +30,9 @@ function CaseDetail() {
   const [documentType, setDocumentType] = useState<DocumentType>('other');
   const [expandedAnalysisId, setExpandedAnalysisId] = useState<string | null>(null);
 
+  const [policyCheckReqDocId, setPolicyCheckReqDocId] = useState('');
+  const [policyCheckTargetDocId, setPolicyCheckTargetDocId] = useState('');
+
   const caseQuery = useQuery({
     queryKey: ['cases', caseId],
     queryFn: () => apiCall<CaseResponseType>(() => bindApi.cases({ case_id: caseId }).get()),
@@ -50,6 +54,13 @@ function CaseDetail() {
           .analysis.get()
       ),
     enabled: !!expandedAnalysisId,
+  });
+
+  const policyCheckQuery = useQuery({
+    queryKey: ['cases', caseId, 'policy-check'],
+    queryFn: () =>
+      apiCall<PolicyCheckResponse>(() => bindApi.cases({ case_id: caseId })['policy-check'].get()),
+    enabled: false,
   });
 
   const transitionMutation = useMutation({
@@ -93,6 +104,16 @@ function CaseDetail() {
     },
   });
 
+  const policyCheckMutation = useMutation({
+    mutationFn: (data: { requirements_document_id: string; target_document_id: string }) =>
+      apiCall<PolicyCheckResponse>(() =>
+        bindApi.cases({ case_id: caseId })['policy-check'].post(data)
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'policy-check'] });
+    },
+  });
+
   function handleAddDocument(e: React.FormEvent) {
     e.preventDefault();
     addDocumentMutation.mutate({
@@ -102,11 +123,20 @@ function CaseDetail() {
     });
   }
 
+  function handleRunPolicyCheck() {
+    if (!policyCheckReqDocId || !policyCheckTargetDocId) return;
+    policyCheckMutation.mutate({
+      requirements_document_id: policyCheckReqDocId,
+      target_document_id: policyCheckTargetDocId,
+    });
+  }
+
   const actionError =
     transitionMutation.error ??
     addDocumentMutation.error ??
     deleteDocumentMutation.error ??
-    analyzeMutation.error;
+    analyzeMutation.error ??
+    policyCheckMutation.error;
 
   if (caseQuery.isLoading) return <main className="p-4">Loading...</main>;
   if (caseQuery.error)
@@ -116,6 +146,17 @@ function CaseDetail() {
   const caseData = caseQuery.data;
   const documents = documentsQuery.data ?? [];
   const status = caseData.status as 'draft' | 'in_review' | 'completed' | 'cancelled';
+
+  const requirementsDocs = documents.filter(
+    (d) => d.document_type === 'contract_requirements' && d.analysis_status === 'completed'
+  );
+  const targetDocs = documents.filter(
+    (d) =>
+      (d.document_type === 'current_policy' || d.document_type === 'carrier_quote') &&
+      d.analysis_status === 'completed'
+  );
+
+  const policyCheckResult = policyCheckMutation.data ?? policyCheckQuery.data;
 
   return (
     <main data-testid="case-detail" className="mx-auto max-w-3xl p-4">
@@ -260,7 +301,7 @@ function CaseDetail() {
             {expandedAnalysisId === doc.id && analysisQuery.data && (
               <pre
                 data-testid={`analysis-result-${doc.id}`}
-                className="border-border bg-muted mb-2 max-h-96 overflow-auto rounded-md border p-3 text-xs"
+                className="bg-muted border-border mb-2 max-h-96 overflow-auto rounded-md border p-3 text-xs"
               >
                 {JSON.stringify(analysisQuery.data, null, 2)}
               </pre>
@@ -271,6 +312,105 @@ function CaseDetail() {
           <li className="text-muted-foreground py-2 text-sm">No documents yet.</li>
         )}
       </ul>
+
+      <hr className="border-border my-6" />
+
+      <div data-testid="policy-check-section">
+        <div className="mb-3 flex items-center gap-4">
+          <h2 className="text-xl font-semibold">Policy Check</h2>
+          <Button
+            data-testid="fetch-latest-policy-check"
+            variant="outline"
+            size="sm"
+            disabled={policyCheckQuery.isFetching}
+            onClick={() => policyCheckQuery.refetch()}
+          >
+            Load Latest
+          </Button>
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs">Requirements Document</label>
+            <select
+              data-testid="policy-check-req-select"
+              value={policyCheckReqDocId}
+              onChange={(e) => setPolicyCheckReqDocId(e.target.value)}
+              className="border-input rounded-md border px-3 py-1.5 text-sm"
+            >
+              <option value="">-- select --</option>
+              {requirementsDocs.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.file_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs">Target Document</label>
+            <select
+              data-testid="policy-check-target-select"
+              value={policyCheckTargetDocId}
+              onChange={(e) => setPolicyCheckTargetDocId(e.target.value)}
+              className="border-input rounded-md border px-3 py-1.5 text-sm"
+            >
+              <option value="">-- select --</option>
+              {targetDocs.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.file_name} ({d.document_type})
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            data-testid="run-policy-check"
+            disabled={
+              !policyCheckReqDocId || !policyCheckTargetDocId || policyCheckMutation.isPending
+            }
+            onClick={handleRunPolicyCheck}
+          >
+            {policyCheckMutation.isPending ? 'Running...' : 'Run Check'}
+          </Button>
+        </div>
+
+        {policyCheckResult && (
+          <div data-testid="policy-check-results">
+            <div
+              data-testid="policy-check-summary"
+              className="bg-muted mb-3 flex gap-3 rounded-md px-3 py-2 text-sm"
+            >
+              <span className="text-green-800">{policyCheckResult.summary_counts.ok} OK</span>
+              <span className="text-orange-800">{policyCheckResult.summary_counts.gap} Gap</span>
+              <span className="text-red-800">
+                {policyCheckResult.summary_counts.missing} Missing
+              </span>
+              <span className="text-yellow-800">
+                {policyCheckResult.summary_counts.review} Review
+              </span>
+              <span className="text-muted-foreground">
+                {policyCheckResult.summary_counts.not_applicable} N/A
+              </span>
+            </div>
+
+            <ul className="space-y-0">
+              {policyCheckResult.results.map((r: CheckResultItem) => (
+                <li
+                  key={r.check_id}
+                  data-testid={`policy-check-item-${r.check_id}`}
+                  className="border-border border-b py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <VerdictBadge verdict={r.verdict} />
+                    <span className="font-medium">{r.check_name}</span>
+                    <span className="text-muted-foreground ml-auto text-xs">{r.severity}</span>
+                  </div>
+                  <p className="text-foreground/70 mt-1 text-sm">{r.message}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
@@ -288,4 +428,20 @@ const STATUS_VARIANTS: Record<string, { variant: BadgeVariant; label: string }> 
 function AnalysisStatusBadge({ status }: { status: string }) {
   const { variant, label } = STATUS_VARIANTS[status] ?? FALLBACK_STATUS;
   return <Badge variant={variant}>{label}</Badge>;
+}
+
+const VERDICT_VARIANT: Record<CheckVerdict, BadgeVariant> = {
+  ok: 'default',
+  gap: 'secondary',
+  missing: 'destructive',
+  review: 'outline',
+  not_applicable: 'outline',
+};
+
+function VerdictBadge({ verdict }: { verdict: CheckVerdict }) {
+  return (
+    <Badge data-testid={`verdict-badge-${verdict}`} variant={VERDICT_VARIANT[verdict]}>
+      {verdict.replace('_', ' ')}
+    </Badge>
+  );
 }
