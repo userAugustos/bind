@@ -1,4 +1,4 @@
-import { t } from 'elysia';
+import { z } from 'zod';
 
 export const CaseStatusValues = ['draft', 'in_review', 'completed', 'cancelled'] as const;
 export type CaseStatus = (typeof CaseStatusValues)[number];
@@ -6,40 +6,31 @@ export type CaseStatus = (typeof CaseStatusValues)[number];
 export const CaseEventValues = ['submit', 'complete', 'cancel'] as const;
 export type CaseEvent = (typeof CaseEventValues)[number];
 
-export const CreateCaseBody = t.Object({
-  case_name: t.String({ minLength: 1 }),
-  client_name: t.String({ minLength: 1 }),
+export const CreateCaseBody = z.object({
+  case_name: z.string().min(1),
+  client_name: z.string().min(1),
 });
 
-export const UpdateCaseBody = t.Object(
-  {
-    case_name: t.Optional(t.String({ minLength: 1 })),
-    client_name: t.Optional(t.String({ minLength: 1 })),
-  },
-  {
-    additionalProperties: false,
-    minProperties: 1,
-  }
-);
+export const UpdateCaseBody = z
+  .object({
+    case_name: z.string().min(1).optional(),
+    client_name: z.string().min(1).optional(),
+  })
+  .refine((data) => data.case_name !== undefined || data.client_name !== undefined, {
+    message: 'At least one field must be provided',
+  });
 
-export const TransitionBody = t.Object({
-  event: t.Union([t.Literal('submit'), t.Literal('complete'), t.Literal('cancel')]),
+export const TransitionBody = z.object({
+  event: z.enum(['submit', 'complete', 'cancel']),
 });
 
-export const CaseResponse = t.Object({
-  id: t.String(),
-  case_name: t.String(),
-  client_name: t.String(),
-  status: t.String(),
-  created_at: t.String(),
-  updated_at: t.String(),
+export const CaseResponse = z.object({
+  id: z.string(),
+  case_name: z.string(),
+  client_name: z.string(),
+  status: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
 });
 
-export interface CaseResponseType {
-  id: string;
-  case_name: string;
-  client_name: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
+export type CaseResponseType = z.infer<typeof CaseResponse>;

@@ -1,20 +1,22 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
+import { z } from 'zod';
 
+import { AnalysisResultSchema } from './analysis.schemas';
 import { analysisService } from './analysis.service';
 
-const AnalysisResponseSchema = t.Object({
-  id: t.String(),
-  document_id: t.String(),
-  document_type: t.String(),
-  status: t.String(),
-  result: t.Unknown(),
-  error: t.Nullable(t.String()),
-  prompt_name: t.String(),
-  prompt_version: t.String(),
-  schema_version: t.String(),
-  model_provider: t.String(),
-  model_name: t.String(),
-  created_at: t.String(),
+const AnalysisResponseSchema = z.object({
+  id: z.string(),
+  document_id: z.string(),
+  document_type: z.string(),
+  status: z.string(),
+  result: AnalysisResultSchema.nullable(),
+  error: z.string().nullable(),
+  prompt_name: z.string(),
+  prompt_version: z.string(),
+  schema_version: z.string(),
+  model_provider: z.string(),
+  model_name: z.string(),
+  created_at: z.string(),
 });
 
 export const analysisRoutes = new Elysia({ prefix: '/cases' })
@@ -25,7 +27,7 @@ export const analysisRoutes = new Elysia({ prefix: '/cases' })
       return analysisService.triggerAnalysis(params.case_id, params.document_id);
     },
     {
-      params: t.Object({ case_id: t.String(), document_id: t.String() }),
+      params: z.object({ case_id: z.string(), document_id: z.string() }),
       response: { 201: AnalysisResponseSchema },
       detail: { summary: 'Trigger document analysis', tags: ['analysis'] },
     }
@@ -34,7 +36,7 @@ export const analysisRoutes = new Elysia({ prefix: '/cases' })
     '/:case_id/documents/:document_id/analysis',
     async ({ params }) => analysisService.getAnalysis(params.case_id, params.document_id),
     {
-      params: t.Object({ case_id: t.String(), document_id: t.String() }),
+      params: z.object({ case_id: z.string(), document_id: z.string() }),
       response: { 200: AnalysisResponseSchema },
       detail: { summary: 'Get latest analysis for a document', tags: ['analysis'] },
     }
@@ -43,8 +45,8 @@ export const analysisRoutes = new Elysia({ prefix: '/cases' })
     '/:case_id/documents/:document_id/analysis/history',
     async ({ params }) => analysisService.getAnalysisHistory(params.case_id, params.document_id),
     {
-      params: t.Object({ case_id: t.String(), document_id: t.String() }),
-      response: { 200: t.Array(AnalysisResponseSchema) },
+      params: z.object({ case_id: z.string(), document_id: z.string() }),
+      response: { 200: z.array(AnalysisResponseSchema) },
       detail: { summary: 'Get analysis history for a document', tags: ['analysis'] },
     }
   );

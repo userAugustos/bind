@@ -70,7 +70,7 @@ export const createApp = () =>
       '/healthz',
       () => ({
         status: 'ok',
-        version: process.env.GIT_COMMIT_SHA ?? 'unknown',
+        version: config.gitCommitSha,
         timestamp: new Date().toISOString(),
       }),
       { detail: { summary: 'Health Check', tags: ['system'] } }

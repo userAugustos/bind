@@ -25,6 +25,7 @@ export const config = {
     key: env.MODAL_KEY ?? '',
     secret: env.MODAL_SECRET ?? '',
   },
+  gitCommitSha: env.GIT_COMMIT_SHA ?? 'unknown',
 };
 
 export type Config = typeof config;

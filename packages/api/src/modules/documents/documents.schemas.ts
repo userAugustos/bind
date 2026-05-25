@@ -1,4 +1,4 @@
-import { t } from 'elysia';
+import { z } from 'zod';
 
 export const DocumentTypeValues = [
   'contract_requirements',
@@ -12,34 +12,20 @@ export type DocumentType = (typeof DocumentTypeValues)[number];
 export const AnalysisStatusValues = ['pending', 'processing', 'completed', 'failed'] as const;
 export type AnalysisStatus = (typeof AnalysisStatusValues)[number];
 
-export const CreateDocumentBody = t.Object({
-  file_name: t.String({ minLength: 1 }),
-  mime_type: t.String({ minLength: 1 }),
-  document_type: t.Union([
-    t.Literal('contract_requirements'),
-    t.Literal('current_policy'),
-    t.Literal('carrier_quote'),
-    t.Literal('loss_history'),
-    t.Literal('other'),
-  ]),
+export const CreateDocumentBody = z.object({
+  file_name: z.string().min(1),
+  mime_type: z.string().min(1),
+  document_type: z.enum(DocumentTypeValues),
 });
 
-export const DocumentResponse = t.Object({
-  id: t.String(),
-  case_id: t.String(),
-  file_name: t.String(),
-  mime_type: t.String(),
-  document_type: t.String(),
-  analysis_status: t.String(),
-  created_at: t.String(),
+export const DocumentResponse = z.object({
+  id: z.string(),
+  case_id: z.string(),
+  file_name: z.string(),
+  mime_type: z.string(),
+  document_type: z.string(),
+  analysis_status: z.string(),
+  created_at: z.string(),
 });
 
-export interface DocumentResponseType {
-  id: string;
-  case_id: string;
-  file_name: string;
-  mime_type: string;
-  document_type: string;
-  analysis_status: string;
-  created_at: string;
-}
+export type DocumentResponseType = z.infer<typeof DocumentResponse>;

@@ -8,7 +8,7 @@ export type AnalysisEvent = (typeof AnalysisEvents)[number];
 
 const transitions: Record<AnalysisState, Partial<Record<AnalysisEvent, AnalysisState>>> = {
   pending: { start: 'processing' },
-  processing: { complete: 'completed', fail: 'failed' },
+  processing: { complete: 'completed', fail: 'failed', retry: 'processing' },
   completed: {},
   failed: { retry: 'processing' },
 };

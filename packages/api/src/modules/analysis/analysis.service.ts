@@ -10,6 +10,7 @@ import { AnalysisResultSchema, SCHEMA_VERSION } from './analysis.schemas';
 import { transitionAnalysisStatus } from './analysis.state-machine';
 import type { AnalysisProvider } from './analysis.provider';
 import type { AnalysisRow } from './analysis.repository';
+import type { AnalysisResult } from './analysis.schemas';
 import type { AnalysisState } from './analysis.state-machine';
 
 export interface AnalysisResponse {
@@ -17,7 +18,7 @@ export interface AnalysisResponse {
   document_id: string;
   document_type: string;
   status: string;
-  result: unknown;
+  result: AnalysisResult | null;
   error: string | null;
   prompt_name: string;
   prompt_version: string;
@@ -27,9 +28,11 @@ export interface AnalysisResponse {
   created_at: string;
 }
 
-function parseResult(raw: string): unknown {
+function parseResult(raw: string): AnalysisResult | null {
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    const validation = AnalysisResultSchema.safeParse(parsed);
+    return validation.success ? validation.data : null;
   } catch {
     return null;
   }
@@ -67,7 +70,7 @@ export const analysisService = {
     }
 
     const currentStatus = document.analysis_status as AnalysisState;
-    const event = currentStatus === 'failed' ? 'retry' : 'start';
+    const event = currentStatus === 'failed' || currentStatus === 'processing' ? 'retry' : 'start';
     const processingStatus = transitionAnalysisStatus(currentStatus, event);
     await documentsRepository.updateAnalysisStatus(documentId, processingStatus);
 

@@ -12,18 +12,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 function Root() {
   return (
     <>
-      <nav
-        style={{
-          padding: '0.5rem 1rem',
-          borderBottom: '1px solid #eee',
-          display: 'flex',
-          gap: '1rem',
-        }}
-      >
-        <Link to="/" style={{ color: '#0070f3' }}>
+      <nav className="border-border flex gap-4 border-b px-4 py-2">
+        <Link to="/" className="text-primary hover:underline">
           Home
         </Link>
-        <Link to="/cases/" style={{ color: '#0070f3' }}>
+        <Link to="/cases/" className="text-primary hover:underline">
           Cases
         </Link>
       </nav>

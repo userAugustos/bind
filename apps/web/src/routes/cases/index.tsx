@@ -1,5 +1,6 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import type { CaseResponseType } from '@bind/api/review-cases';
 
@@ -9,70 +10,52 @@ import { apiCall, bindApi } from '@/api';
 export const Route = createFileRoute('/cases/')({ component: CasesList });
 
 function CasesList() {
-  const [cases, setCases] = useState<CaseResponseType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [caseName, setCaseName] = useState('');
   const [clientName, setClientName] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
-  async function fetchCases() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiCall<CaseResponseType[]>(() => bindApi.cases.get());
-      setCases(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load cases');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const casesQuery = useQuery({
+    queryKey: ['cases'],
+    queryFn: () => apiCall<CaseResponseType[]>(() => bindApi.cases.get()),
+  });
 
-  useEffect(() => {
-    void fetchCases();
-  }, []);
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      await apiCall<CaseResponseType>(() =>
-        bindApi.cases.post({ case_name: caseName, client_name: clientName })
-      );
+  const createMutation = useMutation({
+    mutationFn: (data: { case_name: string; client_name: string }) =>
+      apiCall<CaseResponseType>(() => bindApi.cases.post(data)),
+    onSuccess: async () => {
       setCaseName('');
       setClientName('');
       setShowForm(false);
-      await fetchCases();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create case');
-    } finally {
-      setSubmitting(false);
-    }
+      await queryClient.invalidateQueries({ queryKey: ['cases'] });
+    },
+  });
+
+  function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    createMutation.mutate({ case_name: caseName, client_name: clientName });
   }
 
+  const error = casesQuery.error ?? createMutation.error;
+
   return (
-    <main style={{ padding: '1rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-        <h1>Review Cases</h1>
+    <main className="p-4">
+      <div className="mb-4 flex items-center gap-4">
+        <h1 className="text-2xl font-bold">Review Cases</h1>
         <Button data-testid="new-case-button" onClick={() => setShowForm((v) => !v)}>
           {showForm ? 'Cancel' : 'New Case'}
         </Button>
       </div>
 
       {showForm && (
-        <form
-          onSubmit={handleCreate}
-          style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
-        >
+        <form onSubmit={handleCreate} className="mb-4 flex flex-wrap gap-2">
           <input
             data-testid="case-name-input"
             placeholder="Case name"
             value={caseName}
             onChange={(e) => setCaseName(e.target.value)}
             required
-            style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            className="border-input rounded-md border px-3 py-1.5 text-sm"
           />
           <input
             data-testid="client-name-input"
@@ -80,50 +63,63 @@ function CasesList() {
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
             required
-            style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            className="border-input rounded-md border px-3 py-1.5 text-sm"
           />
-          <Button type="submit" data-testid="create-case-button" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create'}
+          <Button
+            type="submit"
+            data-testid="create-case-button"
+            disabled={createMutation.isPending}
+          >
+            {createMutation.isPending ? 'Creating...' : 'Create'}
           </Button>
         </form>
       )}
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {loading && <p>Loading...</p>}
+      {error && <p className="text-destructive text-sm">{error.message}</p>}
+      {casesQuery.isLoading && <p className="text-muted-foreground">Loading...</p>}
 
-      {!loading && (
-        <table
-          data-testid="cases-list"
-          style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.9rem' }}
-        >
+      {!casesQuery.isLoading && (
+        <table data-testid="cases-list" className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              <th style={thStyle}>Case Name</th>
-              <th style={thStyle}>Client Name</th>
-              <th style={thStyle}>Status</th>
-              <th style={thStyle}>Created</th>
+              <th className="border-border border-b-2 px-3 py-1.5 text-left font-semibold">
+                Case Name
+              </th>
+              <th className="border-border border-b-2 px-3 py-1.5 text-left font-semibold">
+                Client Name
+              </th>
+              <th className="border-border border-b-2 px-3 py-1.5 text-left font-semibold">
+                Status
+              </th>
+              <th className="border-border border-b-2 px-3 py-1.5 text-left font-semibold">
+                Created
+              </th>
             </tr>
           </thead>
           <tbody>
-            {cases.map((c) => (
+            {(casesQuery.data ?? []).map((c) => (
               <tr
                 key={c.id}
                 data-testid={`case-row-${c.id}`}
-                style={{ cursor: 'pointer', borderBottom: '1px solid #eee' }}
+                className="border-border cursor-pointer border-b"
               >
-                <td style={tdStyle}>
-                  <Link to="/cases/$caseId" params={{ caseId: c.id }} style={{ color: '#0070f3' }}>
+                <td className="px-3 py-1.5">
+                  <Link
+                    to="/cases/$caseId"
+                    params={{ caseId: c.id }}
+                    className="text-primary hover:underline"
+                  >
                     {c.case_name}
                   </Link>
                 </td>
-                <td style={tdStyle}>{c.client_name}</td>
-                <td style={tdStyle}>{c.status}</td>
-                <td style={tdStyle}>{new Date(c.created_at).toLocaleDateString()}</td>
+                <td className="px-3 py-1.5">{c.client_name}</td>
+                <td className="px-3 py-1.5">{c.status}</td>
+                <td className="px-3 py-1.5">{new Date(c.created_at).toLocaleDateString()}</td>
               </tr>
             ))}
-            {cases.length === 0 && (
+            {(casesQuery.data ?? []).length === 0 && (
               <tr>
-                <td colSpan={4} style={{ ...tdStyle, color: '#999' }}>
+                <td colSpan={4} className="text-muted-foreground px-3 py-1.5">
                   No cases yet.
                 </td>
               </tr>
@@ -134,14 +130,3 @@ function CasesList() {
     </main>
   );
 }
-
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '0.4rem 0.8rem',
-  borderBottom: '2px solid #ccc',
-  fontWeight: 600,
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '0.4rem 0.8rem',
-};
