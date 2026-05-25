@@ -80,3 +80,20 @@ export const policyCheckResults = sqliteTable('policy_check_results', {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
+
+export const quoteComparisons = sqliteTable('quote_comparisons', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  caseId: text('case_id')
+    .notNull()
+    .references(() => reviewCases.id, { onDelete: 'restrict' }),
+  requirementsDocumentId: text('requirements_document_id')
+    .notNull()
+    .references(() => documents.id, { onDelete: 'cascade' }),
+  targetDocumentIds: text('target_document_ids').notNull(),
+  result: text('result').notNull(),
+  createdAt: text('created_at')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
