@@ -8,52 +8,90 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as rootRouteImport } from './routes/__root';
+import { Route as CasesCaseIdRouteImport } from './routes/cases/$caseId';
+import { Route as CasesIndexRouteImport } from './routes/cases/index';
+import { Route as IndexRouteImport } from './routes/index';
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
+
+const CasesIndexRoute = CasesIndexRouteImport.update({
+  id: '/cases/',
+  path: '/cases/',
+  getParentRoute: () => rootRouteImport,
+} as any);
+
+const CasesCaseIdRoute = CasesCaseIdRouteImport.update({
+  id: '/cases/$caseId',
+  path: '/cases/$caseId',
+  getParentRoute: () => rootRouteImport,
+} as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof IndexRoute;
+  '/cases/': typeof CasesIndexRoute;
+  '/cases/$caseId': typeof CasesCaseIdRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/': typeof IndexRoute;
+  '/cases/': typeof CasesIndexRoute;
+  '/cases/$caseId': typeof CasesCaseIdRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  __root__: typeof rootRouteImport;
+  '/': typeof IndexRoute;
+  '/cases/': typeof CasesIndexRoute;
+  '/cases/$caseId': typeof CasesCaseIdRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
-  fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath;
+  fullPaths: '/' | '/cases/' | '/cases/$caseId';
+  fileRoutesByTo: FileRoutesByTo;
+  to: '/' | '/cases/' | '/cases/$caseId';
+  id: '__root__' | '/' | '/cases/' | '/cases/$caseId';
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  IndexRoute: typeof IndexRoute;
+  CasesIndexRoute: typeof CasesIndexRoute;
+  CasesCaseIdRoute: typeof CasesCaseIdRoute;
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
     '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
+      id: '/';
+      path: '/';
+      fullPath: '/';
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/cases/': {
+      id: '/cases/';
+      path: '/cases/';
+      fullPath: '/cases/';
+      preLoaderRoute: typeof CasesIndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/cases/$caseId': {
+      id: '/cases/$caseId';
+      path: '/cases/$caseId';
+      fullPath: '/cases/$caseId';
+      preLoaderRoute: typeof CasesCaseIdRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-}
+  CasesIndexRoute: CasesIndexRoute,
+  CasesCaseIdRoute: CasesCaseIdRoute,
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();
