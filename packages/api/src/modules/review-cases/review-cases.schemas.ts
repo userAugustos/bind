@@ -1,5 +1,4 @@
 import { t } from 'elysia';
-import type { Static } from 'elysia';
 
 export const CaseStatusValues = ['draft', 'in_review', 'completed', 'cancelled'] as const;
 export type CaseStatus = (typeof CaseStatusValues)[number];
@@ -36,4 +35,11 @@ export const CaseResponse = t.Object({
   updated_at: t.String(),
 });
 
-export type CaseResponseType = Static<typeof CaseResponse>;
+export interface CaseResponseType {
+  id: string;
+  case_name: string;
+  client_name: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
