@@ -23,6 +23,10 @@
     "./documents": {
       "types": "./dist/documents.d.ts",
       "import": "./dist/documents.js"
+    },
+    "./analysis": {
+      "types": "./dist/analysis.d.ts",
+      "import": "./dist/analysis.js"
     }
   },
   "scripts": {

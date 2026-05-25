@@ -5,6 +5,7 @@ import { openapi } from '@elysiajs/openapi';
 import { Elysia } from 'elysia';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+import { analysisRoutes } from '@api/modules/analysis/analysis.routes';
 import { documentsRoutes } from '@api/modules/documents/documents.routes';
 import { reviewCasesRoutes } from '@api/modules/review-cases/review-cases.routes';
 import { config } from '@core/env';
@@ -52,6 +53,7 @@ export const createApp = () =>
     .use(cors())
     .use(reviewCasesRoutes)
     .use(documentsRoutes)
+    .use(analysisRoutes)
     .use(
       config.isProduction
         ? new Elysia({ name: 'openapi-disabled' })

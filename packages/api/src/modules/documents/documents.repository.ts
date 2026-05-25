@@ -57,4 +57,8 @@ export const documentsRepository = {
       .where(eq(documents.caseId, caseId));
     return rows[0]?.total ?? 0;
   },
+
+  async updateAnalysisStatus(id: string, status: string): Promise<void> {
+    await db.update(documents).set({ analysisStatus: status }).where(eq(documents.id, id));
+  },
 };
