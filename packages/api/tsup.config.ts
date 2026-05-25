@@ -10,6 +10,7 @@ export default defineConfig((options) => ({
     analysis: 'src/sdk/analysis.ts',
     'policy-check': 'src/sdk/policy-check.ts',
     'quote-comparison': 'src/sdk/quote-comparison.ts',
+    memo: 'src/sdk/memo.ts',
   },
   format: ['esm'],
   dts: true,

@@ -43,6 +43,13 @@
       "when": 1779680653763,
       "tag": "0005_many_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1779682016353,
+      "tag": "0006_curly_the_santerians",
+      "breakpoints": true
     }
   ]
 }

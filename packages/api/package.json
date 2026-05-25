@@ -35,6 +35,10 @@
     "./quote-comparison": {
       "types": "./dist/quote-comparison.d.ts",
       "import": "./dist/quote-comparison.js"
+    },
+    "./memo": {
+      "types": "./dist/memo.d.ts",
+      "import": "./dist/memo.js"
     }
   },
   "scripts": {

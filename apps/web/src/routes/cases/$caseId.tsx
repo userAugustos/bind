@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import type { AnalysisResponse } from '@bind/api/analysis';
 import type { DocumentResponseType, DocumentType } from '@bind/api/documents';
+import type { MemoResponse } from '@bind/api/memo';
 import type { CheckResultItem, CheckVerdict, PolicyCheckResponse } from '@bind/api/policy-check';
 import type { OptionSummary, QuoteComparisonResponse } from '@bind/api/quote-comparison';
 import type { CaseEvent, CaseResponseType } from '@bind/api/review-cases';
@@ -64,6 +65,12 @@ function CaseDetail() {
     enabled: false,
   });
 
+  const memoQuery = useQuery({
+    queryKey: ['cases', caseId, 'memo'],
+    queryFn: () => apiCall<MemoResponse>(() => bindApi.cases({ case_id: caseId }).memo.get()),
+    enabled: false,
+  });
+
   const transitionMutation = useMutation({
     mutationFn: (event: CaseEvent) =>
       apiCall<CaseResponseType>(() =>
@@ -110,9 +117,6 @@ function CaseDetail() {
       apiCall<PolicyCheckResponse>(() =>
         bindApi.cases({ case_id: caseId })['policy-check'].post(data)
       ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'policy-check'] });
-    },
   });
 
   const quoteComparisonMutation = useMutation({
@@ -123,6 +127,10 @@ function CaseDetail() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'quote-comparison'] });
     },
+  });
+
+  const memoMutation = useMutation({
+    mutationFn: () => apiCall<MemoResponse>(() => bindApi.cases({ case_id: caseId }).memo.post({})),
   });
 
   function handleAddDocument(e: React.FormEvent) {
@@ -148,7 +156,11 @@ function CaseDetail() {
     deleteDocumentMutation.error ??
     analyzeMutation.error ??
     policyCheckMutation.error ??
-    quoteComparisonMutation.error;
+    quoteComparisonMutation.error ??
+    memoMutation.error ??
+    documentsQuery.error ??
+    policyCheckQuery.error ??
+    memoQuery.error;
 
   if (caseQuery.isLoading) return <main className="p-4">Loading...</main>;
   if (caseQuery.error)
@@ -171,6 +183,7 @@ function CaseDetail() {
   const policyCheckResult = policyCheckMutation.data ?? policyCheckQuery.data;
   const quoteComparisonResult = quoteComparisonMutation.data;
   const canRunComparison = requirementsDocs.length > 0 && targetDocs.length >= 2;
+  const memoResult = memoMutation.data ?? memoQuery.data;
 
   function handleRunQuoteComparison() {
     const reqDoc = requirementsDocs[0];
@@ -238,7 +251,6 @@ function CaseDetail() {
 
       <hr className="border-border my-6" />
 
-      {/* Documents section */}
       <div className="mb-3 flex items-center gap-4">
         <h2 className="text-xl font-semibold">Documents</h2>
         <Button
@@ -339,7 +351,6 @@ function CaseDetail() {
 
       <hr className="border-border my-6" />
 
-      {/* Policy Check section */}
       <div data-testid="policy-check-section">
         <div className="mb-3 flex items-center gap-4">
           <h2 className="text-xl font-semibold">Policy Check</h2>
@@ -439,7 +450,6 @@ function CaseDetail() {
 
       <hr className="border-border my-6" />
 
-      {/* Quote Comparison section */}
       <div data-testid="quote-comparison-section">
         <div className="mb-3 flex items-center gap-4">
           <h2 className="text-xl font-semibold">Quote Comparison</h2>
@@ -499,7 +509,67 @@ function CaseDetail() {
           </div>
         )}
       </div>
+
+      <hr className="border-border my-6" />
+
+      <div data-testid="memo-section">
+        <div className="mb-3 flex items-center gap-4">
+          <h2 className="text-xl font-semibold">Proposal Memo</h2>
+          <Button
+            data-testid="generate-memo"
+            disabled={memoMutation.isPending}
+            onClick={() => memoMutation.mutate()}
+          >
+            {memoMutation.isPending ? 'Generating...' : 'Generate Memo'}
+          </Button>
+          <Button
+            data-testid="load-latest-memo"
+            variant="outline"
+            size="sm"
+            disabled={memoQuery.isFetching}
+            onClick={() => memoQuery.refetch()}
+          >
+            Load Latest
+          </Button>
+        </div>
+
+        {memoResult?.status === 'completed' && memoResult.content && (
+          <div data-testid="memo-content" className="space-y-4">
+            <MemoSectionBlock
+              title="Executive Summary"
+              content={memoResult.content.executive_summary}
+            />
+            <MemoSectionBlock title="Coverage Gaps" content={memoResult.content.coverage_gaps} />
+            <MemoSectionBlock
+              title="Quote Comparison"
+              content={memoResult.content.quote_comparison}
+            />
+            <MemoSectionBlock title="Recommendation" content={memoResult.content.recommendation} />
+            <div>
+              <h3 className="mb-1 text-sm font-semibold">Next Steps</h3>
+              <ul className="text-foreground/80 ml-5 list-disc text-sm">
+                {memoResult.content.next_steps.map((step, i) => (
+                  <li key={i}>{step}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {memoResult?.status === 'failed' && (
+          <p className="text-destructive text-sm">Memo generation failed: {memoResult.error}</p>
+        )}
+      </div>
     </main>
+  );
+}
+
+function MemoSectionBlock({ title, content }: { title: string; content: string }) {
+  return (
+    <div>
+      <h3 className="mb-1 text-sm font-semibold">{title}</h3>
+      <p className="text-foreground/80 text-sm">{content}</p>
+    </div>
   );
 }
 
@@ -518,17 +588,22 @@ function AnalysisStatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-const VERDICT_VARIANT: Record<CheckVerdict, BadgeVariant> = {
-  ok: 'default',
-  gap: 'secondary',
-  missing: 'destructive',
-  review: 'outline',
-  not_applicable: 'outline',
+const VERDICT_STYLES: Record<CheckVerdict, { variant: BadgeVariant; className?: string }> = {
+  ok: { variant: 'default' },
+  gap: { variant: 'outline', className: 'border-orange-300 bg-orange-50 text-orange-800' },
+  missing: { variant: 'destructive' },
+  review: { variant: 'outline', className: 'border-yellow-300 bg-yellow-50 text-yellow-800' },
+  not_applicable: { variant: 'outline' },
 };
 
 function VerdictBadge({ verdict }: { verdict: CheckVerdict }) {
+  const style = VERDICT_STYLES[verdict];
   return (
-    <Badge data-testid={`verdict-badge-${verdict}`} variant={VERDICT_VARIANT[verdict]}>
+    <Badge
+      data-testid={`verdict-badge-${verdict}`}
+      variant={style.variant}
+      className={style.className}
+    >
       {verdict.replace('_', ' ')}
     </Badge>
   );
