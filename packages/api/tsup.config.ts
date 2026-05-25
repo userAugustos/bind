@@ -9,6 +9,7 @@ export default defineConfig((options) => ({
     documents: 'src/sdk/documents.ts',
     analysis: 'src/sdk/analysis.ts',
     'policy-check': 'src/sdk/policy-check.ts',
+    'quote-comparison': 'src/sdk/quote-comparison.ts',
   },
   format: ['esm'],
   dts: true,

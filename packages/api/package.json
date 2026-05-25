@@ -31,6 +31,10 @@
     "./policy-check": {
       "types": "./dist/policy-check.d.ts",
       "import": "./dist/policy-check.js"
+    },
+    "./quote-comparison": {
+      "types": "./dist/quote-comparison.d.ts",
+      "import": "./dist/quote-comparison.js"
     }
   },
   "scripts": {

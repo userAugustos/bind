@@ -15,6 +15,7 @@ This document is a living feature plan. It describes product capabilities, featu
 Branch: `feat/review-case-foundation` — PR #1.
 Branch: `feat/ai-document-analysis` — PR #2 (targets `feat/review-case-foundation`).
 Branch: `feat/policy-check` — PR #3 (targets `feat/ai-document-analysis`).
+Branch: `feat/quote-comparison` — PR #4 (targets `feat/policy-check`).
 
 ### Status by feature
 
@@ -24,7 +25,7 @@ Branch: `feat/policy-check` — PR #3 (targets `feat/ai-document-analysis`).
 | Document Vault           | Partial     | Metadata CRUD done. No PDF upload/storage, no analysis results, several metadata fields deferred.                                                                                       |
 | AI Document Analysis     | Partial     | LLM adapter (Mock + Modal), Zod schemas, analysis CRUD, status state machine, 10 e2e tests, simple testing UI. No PDF upload/conversion, no prompt files, no real Modal deployment yet. |
 | Policy Check             | Partial     | 5 deterministic checks, CRUD, 9 e2e tests, simple UI. No limit_basis comparison, no page evidence enrichment.                                                                           |
-| Quote Comparison         | Not started | —                                                                                                                                                                                       |
+| Quote Comparison         | Partial     | Deterministic engine, recommendation signal, CRUD, 10 e2e tests, simple UI. No multi-run diffing.                                                                                       |
 | Proposal / Decision Memo | Not started | —                                                                                                                                                                                       |
 
 ### Iteration 1 — done (PR #1)
@@ -147,6 +148,34 @@ Branch: `feat/policy-check` — PR #3 (targets `feat/ai-document-analysis`).
 
 - Waiver/primary keyword matching is permissive (single-keyword substring match) — could produce false positives with complex endorsement names.
 - Route response schemas should use `t.Union` with literals for proper OpenAPI enum documentation.
+
+### Iteration 4 — done (PR #4)
+
+**Quote Comparison**
+
+- Table `quote_comparisons` with `id`, `case_id` (FK restrict), `requirements_document_id` (FK cascade), `target_document_ids` (JSON array in TEXT), `result` (JSON in TEXT), `created_at`.
+- Deterministic comparison engine (pure functions, zero I/O):
+  - `buildOptionSummary()` — builds per-option summary from analysis data + policy check results
+  - `computeRecommendation()` — deterministic recommendation algorithm (4 tiers)
+  - `runComparison()` — orchestrates options + recommendation
+- Per-option summary includes: carrier_name, premium (nullable for current_policy), deductible_summary, meets_core_requirements, policy_check_summary counts, strengths, risks, missing_requirements, review_items.
+- Recommendation algorithm: single qualifying option → `meets_all_requirements_only_option`; multiple → lowest cost → `meets_all_requirements_lowest_cost`; none → fewest gaps → `fewest_material_gaps`.
+- Minimum 2 targets enforced (Elysia schema `minItems: 2` returns 422, service defense-in-depth returns 400).
+- Policy check results required as prerequisite for each target document.
+- Routes: `POST /cases/:case_id/quote-comparison`, `GET .../quote-comparison`, `GET .../quote-comparison/history`.
+- SDK exports: `@bind/api/quote-comparison` (types: QuoteComparisonResponse, ComparisonResult, OptionSummary, RecommendationSignal, RecommendationReason).
+- 10 e2e tests covering: full comparison, per-option correctness, recommendation correctness, error cases, GET/history.
+- Simple throwaway UI: auto-select docs, run comparison, recommendation banner, side-by-side option cards.
+
+### Deviations from the plan (iteration 4)
+
+- **No Carrier A mock as separate quote.** The plan mentions Carrier A as a quote option, but the mock data only has one carrier_quote (Carrier B). The current policy is "Carrier A" by name but uses the `current_policy` document type which has no `premium` field. This is handled correctly — premium is null for current policies.
+- **No multi-run diffing.** Each POST creates a new comparison; there's no diff between runs.
+
+### Open decisions for next iteration (from iteration 4)
+
+1. **Next feature to build.** Proposal / Decision Memo — the final LLM-driven feature that turns structured review data into stakeholder-facing prose.
+2. Previous open decisions still apply (re-analysis path, async analysis, PATCH on terminal cases, limit_basis comparison).
 
 ## Demo Scenario
 

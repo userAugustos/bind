@@ -36,6 +36,13 @@
       "when": 1779679379075,
       "tag": "0004_lying_alex_power",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1779680653763,
+      "tag": "0005_many_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

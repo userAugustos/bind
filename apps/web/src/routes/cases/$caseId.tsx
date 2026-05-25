@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { AnalysisResponse } from '@bind/api/analysis';
 import type { DocumentResponseType, DocumentType } from '@bind/api/documents';
 import type { CheckResultItem, CheckVerdict, PolicyCheckResponse } from '@bind/api/policy-check';
+import type { OptionSummary, QuoteComparisonResponse } from '@bind/api/quote-comparison';
 import type { CaseEvent, CaseResponseType } from '@bind/api/review-cases';
 
 import { Badge } from '@repo/ui/shadcn/badge';
@@ -114,6 +115,16 @@ function CaseDetail() {
     },
   });
 
+  const quoteComparisonMutation = useMutation({
+    mutationFn: (data: { requirements_document_id: string; target_document_ids: string[] }) =>
+      apiCall<QuoteComparisonResponse>(() =>
+        bindApi.cases({ case_id: caseId })['quote-comparison'].post(data)
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'quote-comparison'] });
+    },
+  });
+
   function handleAddDocument(e: React.FormEvent) {
     e.preventDefault();
     addDocumentMutation.mutate({
@@ -136,7 +147,8 @@ function CaseDetail() {
     addDocumentMutation.error ??
     deleteDocumentMutation.error ??
     analyzeMutation.error ??
-    policyCheckMutation.error;
+    policyCheckMutation.error ??
+    quoteComparisonMutation.error;
 
   if (caseQuery.isLoading) return <main className="p-4">Loading...</main>;
   if (caseQuery.error)
@@ -157,6 +169,17 @@ function CaseDetail() {
   );
 
   const policyCheckResult = policyCheckMutation.data ?? policyCheckQuery.data;
+  const quoteComparisonResult = quoteComparisonMutation.data;
+  const canRunComparison = requirementsDocs.length > 0 && targetDocs.length >= 2;
+
+  function handleRunQuoteComparison() {
+    const reqDoc = requirementsDocs[0];
+    if (!reqDoc || targetDocs.length < 2) return;
+    quoteComparisonMutation.mutate({
+      requirements_document_id: reqDoc.id,
+      target_document_ids: targetDocs.map((d) => d.id),
+    });
+  }
 
   return (
     <main data-testid="case-detail" className="mx-auto max-w-3xl p-4">
@@ -215,6 +238,7 @@ function CaseDetail() {
 
       <hr className="border-border my-6" />
 
+      {/* Documents section */}
       <div className="mb-3 flex items-center gap-4">
         <h2 className="text-xl font-semibold">Documents</h2>
         <Button
@@ -315,6 +339,7 @@ function CaseDetail() {
 
       <hr className="border-border my-6" />
 
+      {/* Policy Check section */}
       <div data-testid="policy-check-section">
         <div className="mb-3 flex items-center gap-4">
           <h2 className="text-xl font-semibold">Policy Check</h2>
@@ -411,6 +436,69 @@ function CaseDetail() {
           </div>
         )}
       </div>
+
+      <hr className="border-border my-6" />
+
+      {/* Quote Comparison section */}
+      <div data-testid="quote-comparison-section">
+        <div className="mb-3 flex items-center gap-4">
+          <h2 className="text-xl font-semibold">Quote Comparison</h2>
+          <Button
+            data-testid="run-quote-comparison"
+            disabled={!canRunComparison || quoteComparisonMutation.isPending}
+            onClick={handleRunQuoteComparison}
+          >
+            {quoteComparisonMutation.isPending ? 'Running...' : 'Run Comparison'}
+          </Button>
+        </div>
+
+        {!canRunComparison && (
+          <p className="text-muted-foreground text-sm">
+            {requirementsDocs.length === 0
+              ? 'Needs a completed contract_requirements analysis.'
+              : `Needs at least 2 completed target docs (current_policy / carrier_quote). Found ${targetDocs.length}.`}
+          </p>
+        )}
+
+        {quoteComparisonResult && (
+          <div data-testid="quote-comparison-results">
+            {quoteComparisonResult.result.recommendation.recommended_document_id && (
+              <div
+                data-testid="quote-comparison-recommendation"
+                className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4"
+              >
+                <strong>
+                  Recommended:{' '}
+                  {quoteComparisonResult.result.options.find(
+                    (o) =>
+                      o.target_document_id ===
+                      quoteComparisonResult.result.recommendation.recommended_document_id
+                  )?.option_name ?? 'Unknown'}
+                </strong>
+                <p className="mt-1 text-sm text-blue-800">
+                  {quoteComparisonResult.result.recommendation.reason}
+                </p>
+                <p className="text-foreground/70 mt-1 text-sm">
+                  {quoteComparisonResult.result.recommendation.explanation}
+                </p>
+              </div>
+            )}
+
+            <div data-testid="quote-comparison-options" className="flex gap-4 overflow-x-auto">
+              {quoteComparisonResult.result.options.map((option) => (
+                <QuoteOptionCard
+                  key={option.target_document_id}
+                  option={option}
+                  isRecommended={
+                    option.target_document_id ===
+                    quoteComparisonResult.result.recommendation.recommended_document_id
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
@@ -443,5 +531,77 @@ function VerdictBadge({ verdict }: { verdict: CheckVerdict }) {
     <Badge data-testid={`verdict-badge-${verdict}`} variant={VERDICT_VARIANT[verdict]}>
       {verdict.replace('_', ' ')}
     </Badge>
+  );
+}
+
+function QuoteOptionCard({
+  option,
+  isRecommended,
+}: {
+  option: OptionSummary;
+  isRecommended: boolean;
+}) {
+  return (
+    <div
+      data-testid={`quote-option-${option.target_document_id}`}
+      className={`min-w-[300px] flex-1 rounded-lg border p-4 ${
+        isRecommended ? 'border-2 border-blue-500 bg-blue-50/50' : 'border-border bg-background'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold">{option.option_name}</h3>
+        <span data-testid={`meets-requirements-${option.target_document_id}`} className="text-lg">
+          {option.meets_core_requirements ? '✅' : '❌'}
+        </span>
+      </div>
+      <p className="text-muted-foreground mt-1 text-sm">{option.carrier_name}</p>
+      <p className="mt-1 text-sm font-semibold">
+        Premium: {option.premium != null ? `$${option.premium.toLocaleString()}` : 'N/A'}
+      </p>
+      <p className="text-foreground/70 mt-1 text-sm">{option.deductible_summary}</p>
+
+      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+        <span className="text-green-800">{option.policy_check_summary.ok} OK</span>
+        <span className="text-orange-800">{option.policy_check_summary.gap} Gap</span>
+        <span className="text-red-800">{option.policy_check_summary.missing} Missing</span>
+        <span className="text-yellow-800">{option.policy_check_summary.review} Review</span>
+        <span className="text-muted-foreground">
+          {option.policy_check_summary.not_applicable} N/A
+        </span>
+      </div>
+
+      {option.strengths.length > 0 && (
+        <div className="mt-2">
+          <strong className="text-xs">Strengths</strong>
+          <ul className="mt-1 ml-5 list-disc text-xs">
+            {option.strengths.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {option.risks.length > 0 && (
+        <div className="mt-2">
+          <strong className="text-xs text-amber-600">Risks</strong>
+          <ul className="mt-1 ml-5 list-disc text-xs">
+            {option.risks.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {option.missing_requirements.length > 0 && (
+        <div className="mt-2">
+          <strong className="text-destructive text-xs">Missing Requirements</strong>
+          <ul className="mt-1 ml-5 list-disc text-xs">
+            {option.missing_requirements.map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
