@@ -8,6 +8,7 @@ export default defineConfig((options) => ({
     'review-cases': 'src/sdk/review-cases.ts',
     documents: 'src/sdk/documents.ts',
     analysis: 'src/sdk/analysis.ts',
+    'policy-check': 'src/sdk/policy-check.ts',
   },
   format: ['esm'],
   dts: true,

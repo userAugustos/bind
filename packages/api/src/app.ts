@@ -7,6 +7,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { analysisRoutes } from '@api/modules/analysis/analysis.routes';
 import { documentsRoutes } from '@api/modules/documents/documents.routes';
+import { policyCheckRoutes } from '@api/modules/policy-check/policy-check.routes';
 import { reviewCasesRoutes } from '@api/modules/review-cases/review-cases.routes';
 import { config } from '@core/env';
 import { errorPlugin } from '@core/errors';
@@ -54,6 +55,7 @@ export const createApp = () =>
     .use(reviewCasesRoutes)
     .use(documentsRoutes)
     .use(analysisRoutes)
+    .use(policyCheckRoutes)
     .use(
       config.isProduction
         ? new Elysia({ name: 'openapi-disabled' })

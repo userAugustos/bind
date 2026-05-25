@@ -29,6 +29,13 @@
       "when": 1779676855679,
       "tag": "0003_unknown_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1779679379075,
+      "tag": "0004_lying_alex_power",
+      "breakpoints": true
     }
   ]
 }
