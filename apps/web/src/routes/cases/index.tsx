@@ -16,6 +16,7 @@ import {
   TableRow,
 } from '@repo/ui/shadcn/table';
 import { apiCall, bindApi } from '@/api';
+import { getErrorMessage } from '@/modules/core/lib/errors';
 
 export const Route = createFileRoute('/cases/')({ component: CasesList });
 
@@ -46,10 +47,6 @@ function caseFormReducer(state: CaseFormState, event: CaseFormEvent): CaseFormSt
     case 'reset':
       return initialCaseForm;
   }
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
 }
 
 function CasesList() {

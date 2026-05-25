@@ -24,6 +24,8 @@ import {
   TableRow,
 } from '@repo/ui/shadcn/table';
 import { apiCall, bindApi } from '@/api';
+import { getErrorMessage } from '@/modules/core/lib/errors';
+import { isOneOfValue } from '@/modules/core/lib/guards';
 
 export const Route = createFileRoute('/cases/$caseId')({ component: CaseDetail });
 
@@ -70,14 +72,6 @@ function documentFormReducer(
     case 'reset':
       return initialDocumentForm;
   }
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
-
-function isDocumentType(value: string): value is DocumentType {
-  return DOCUMENT_TYPES.includes(value as DocumentType);
 }
 
 function CaseDetail() {
@@ -237,7 +231,7 @@ function CaseDetail() {
           <Select
             value={documentForm.documentType}
             onValueChange={(value) => {
-              if (isDocumentType(value)) {
+              if (isOneOfValue(DOCUMENT_TYPES, value)) {
                 dispatchDocumentForm({ type: 'documentType.changed', value });
               }
             }}
