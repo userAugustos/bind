@@ -22,8 +22,8 @@
   },
   "dependencies": {
     "@elysiajs/eden": "1.4.6",
-    "@repo/ui": "*",
-    "@bind/api": "*",
+    "@bind/api": "workspace:*",
+    "@repo/ui": "workspace:*",
     "@tanstack/react-query": "^5.81.2",
     "@tanstack/react-query-devtools": "^5.81.2",
     "@tanstack/react-router": "^1.121.34",
@@ -37,6 +37,7 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@bind/tsconfig": "workspace:*",
     "@playwright/test": "^1.57.0",
     "@tailwindcss/vite": "^4.1.10",
     "@tanstack/router-plugin": "^1.121.37",

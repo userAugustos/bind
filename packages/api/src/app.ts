@@ -5,6 +5,8 @@ import { openapi } from '@elysiajs/openapi';
 import { Elysia } from 'elysia';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+import { documentsRoutes } from '@api/modules/documents/documents.routes';
+import { reviewCasesRoutes } from '@api/modules/review-cases/review-cases.routes';
 import { config } from '@core/env';
 import { errorPlugin } from '@core/errors';
 import { LOG_DOMAINS, logger } from '@core/logger';
@@ -48,6 +50,8 @@ export const createApp = () =>
       });
     })
     .use(cors())
+    .use(reviewCasesRoutes)
+    .use(documentsRoutes)
     .use(
       config.isProduction
         ? new Elysia({ name: 'openapi-disabled' })

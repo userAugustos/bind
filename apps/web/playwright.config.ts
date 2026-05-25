@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 import './env-loader';
 
+import { getWebServerPort } from './env-loader';
+
+const webUrl = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${getWebServerPort()}`;
+
 export default defineConfig({
   testDir: './src/__tests__',
   testMatch: '**/*.spec.ts',
@@ -13,7 +17,7 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   timeout: 60_000,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5174',
+    baseURL: webUrl,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -25,7 +29,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'cd ../.. && bun run docker:rm-all && bun run dev',
-    url: `${process.env.VITE_API_URL || 'http://localhost:3001'}/healthz`,
+    url: webUrl,
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
   },

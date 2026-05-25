@@ -10,3 +10,4 @@ playwright-report
 test-results
 .bun
 .setup-answers.json
+packages/api/data/

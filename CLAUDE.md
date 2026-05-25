@@ -58,6 +58,7 @@ Organized by domain modules in `src/modules/`. Each module follows a layered pat
 Key conventions:
 
 - **Errors** — Throw `AppError` via helpers: `badRequest()`, `notFound()`, `conflict()`, etc. The error plugin in `@core/errors` translates to JSON envelopes — no manual try/catch for response mapping.
+- **Validation** — Zod is mandatory for API validation and response schemas. Do not import or use Elysia TypeBox helpers (`t`) or TypeBox `Static`; `import { t } from 'elysia'` is forbidden.
 - **Config/Logging** — Use `@core/env` and `@core/logger`. Never `Bun.env` or `console.*` in feature modules.
 - **Telemetry** — `record()` for spans, `emitMetric()` for metrics, `withTraceContext()` for distributed tracing.
 - **API payloads** — snake_case to match clients.
@@ -71,8 +72,12 @@ Feature modules in `src/modules/`, file-based routing in `src/routes/`.
 
 Key conventions:
 
-- **Data fetching** — Eden Treaty client (`bindApi.module.endpoint.get()`), never `useEffect` for fetching. Use `apiCall<T>(...)` to extract typed data and propagate errors.
-- **Types** — Import API types from `@bind/api/client` (and feature subpaths as they're added).
+- **Data fetching** — Server/API data must be fetched through TanStack Query using the Eden Treaty client from `apps/web/src/api.ts` (`bindApi.module.endpoint.get()`) and `apiCall<T>(...)` to extract typed data and propagate errors. Do not fetch API data in `useEffect`.
+- **Mutations** — API writes must use TanStack Query mutations or machine actions, then invalidate/update queries. Do not hide API writes in ad hoc component functions that manually coordinate server state.
+- **Server state** — Do not mirror query lifecycle in component state (`loading`, `error`, fetched arrays/objects). TanStack Query owns server data, loading, errors, retries, request cancellation, and stale response handling.
+- **Local state** — Use local `useState` only for true UI-local state such as form fields, disclosure state, and temporary interaction state. If related values change together, use a reducer, a store for shared state, or machine context/events when the state belongs to a workflow.
+- **Types** — API schemas/types are owned by `packages/api` and exported through the SDK. Web must import API types from `@bind/api/client` or feature subpaths and must not recreate API response/request types with divergent local interfaces. UI-only types are allowed only when they describe UI state that does not exist in the API contract.
+- **Pending actions** — Any transition, submit, delete, or mutation button must be disabled while its mutation is pending. Prevent duplicate state transitions and double submits by construction.
 - **Testing** — `data-testid` attributes for Playwright selectors.
 
 ## Shared UI (packages/ui)
@@ -83,11 +88,18 @@ Key conventions:
 - `lib/utils.ts` — `cn()` for class merging
 - `styles/index.css` — Tailwind v4 `@theme` tokens (no `tailwind.config.ts`)
 
+Rules:
+
+- If shadcn/ui provides a primitive for the UI being built (`Button`, `Input`, `Select`, `Table`, `Dialog`, `Form`, etc.), use or add the shadcn wrapper in `packages/ui/src/shadcn` instead of hand-rolling raw elements and styles in app code.
+- App routes/components should compose shadcn primitives with project styling. Avoid inline styles and custom one-off primitives unless no shadcn primitive exists or the component is truly product-specific.
+
 ## API SDK Exports
 
 The API package exports typed subpath modules (`@bind/api/client`, `@bind/api/core`, etc.) built by tsup. The web app consumes these for type-safe API integration.
 
 **Critical**: when adding a new API module, follow the three-step recipe — add the file to `src/sdk/<name>.ts`, the entry to `tsup.config.ts`, and the entry to `packages/api/package.json` `exports`. The `apps/web/src/__sdk-smoke.ts` file is permanent and enforces this contract at typecheck time. Don't delete it.
+
+SDK types must stay precise enough for web consumers. Do not export API response types that collapse to `any` or broad `string` when the API contract is a known enum/literal union. If the API uses runtime schemas, export explicit TypeScript contract types from the API package and make schemas satisfy those contracts.
 
 ## Path Aliases
 
@@ -104,6 +116,8 @@ The API package exports typed subpath modules (`@bind/api/client`, `@bind/api/co
 - **Linter**: Oxlint (not ESLint) — config in `.oxlintrc.json`
 - **Formatter**: Prettier with import sorting and Tailwind class ordering
 - **TypeScript**: Use `import type` for type-only imports (enforced by oxlint)
+- **Quality gate**: Never commit or push with failing lint, typecheck, or format checks. Run `bun check` before committing code changes; if checks cannot be run or fail for unrelated local files, state that explicitly and do not claim the branch is clean.
+- **Review discipline**: Before finishing a feature or review fix, reread every changed line and verify it follows these rules, especially API-owned types, TanStack Query data flow, shadcn usage, and pending-disabled mutations.
 
 ## Environment & Conventions
 

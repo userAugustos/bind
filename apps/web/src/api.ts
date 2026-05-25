@@ -1,4 +1,4 @@
-import { edenTreaty } from '@elysiajs/eden';
+import { treaty } from '@elysiajs/eden';
 import type { z } from 'zod';
 
 import type { BindApi as BindApiType } from '@bind/api/client';
@@ -7,7 +7,7 @@ import { webEnv } from '@/modules/core/lib/env';
 
 const API_URL = webEnv.api.baseUrl;
 
-export const bindPublicApi = edenTreaty<BindApiType>(API_URL);
+export const bindPublicApi = treaty<BindApiType>(API_URL);
 
 export const bindApi = bindPublicApi;
 

@@ -5,6 +5,8 @@ export default defineConfig((options) => ({
     index: 'src/sdk/index.ts',
     client: 'src/sdk/client.ts',
     core: 'src/sdk/core.ts',
+    'review-cases': 'src/sdk/review-cases.ts',
+    documents: 'src/sdk/documents.ts',
   },
   format: ['esm'],
   dts: true,
