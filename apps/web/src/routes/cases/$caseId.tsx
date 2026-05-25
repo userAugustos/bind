@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import type { AnalysisResponse } from '@bind/api/analysis';
 import type { DocumentResponseType, DocumentType } from '@bind/api/documents';
+import type { CheckResultItem, CheckVerdict, PolicyCheckResponse } from '@bind/api/policy-check';
 import type { CaseEvent, CaseResponseType } from '@bind/api/review-cases';
 
 import { Badge } from '@repo/ui/shadcn/badge';
@@ -20,37 +21,6 @@ const DOCUMENT_TYPES: DocumentType[] = [
   'other',
 ];
 
-interface PolicyCheckResult {
-  check_id: string;
-  check_name: string;
-  verdict: 'ok' | 'gap' | 'missing' | 'review' | 'not_applicable';
-  severity: 'blocking' | 'material' | 'minor' | 'informational';
-  message: string;
-  evidence: {
-    requirement_source: string;
-    found_value: string | null;
-    document_id: string;
-    page_numbers: number[];
-  };
-}
-
-interface PolicyCheckResponse {
-  id: string;
-  case_id: string;
-  requirements_document_id: string;
-  target_document_id: string;
-  target_document_type: string;
-  results: PolicyCheckResult[];
-  summary_counts: {
-    ok: number;
-    gap: number;
-    missing: number;
-    review: number;
-    not_applicable: number;
-  };
-  created_at: string;
-}
-
 function CaseDetail() {
   const { caseId } = Route.useParams();
   const queryClient = useQueryClient();
@@ -62,17 +32,11 @@ function CaseDetail() {
 
   const [policyCheckReqDocId, setPolicyCheckReqDocId] = useState('');
   const [policyCheckTargetDocId, setPolicyCheckTargetDocId] = useState('');
-  const [policyCheckRunning, setPolicyCheckRunning] = useState(false);
-  const [policyCheckResult, setPolicyCheckResult] = useState<PolicyCheckResponse | null>(null);
 
-  async function fetchCase() {
-    try {
-      const data = await apiCall<CaseResponseType>(() => bindApi.cases({ case_id: caseId }).get());
-      setCaseData(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load case');
-    }
-  }
+  const caseQuery = useQuery({
+    queryKey: ['cases', caseId],
+    queryFn: () => apiCall<CaseResponseType>(() => bindApi.cases({ case_id: caseId }).get()),
+  });
 
   const documentsQuery = useQuery({
     queryKey: ['cases', caseId, 'documents'],
@@ -90,6 +54,13 @@ function CaseDetail() {
           .analysis.get()
       ),
     enabled: !!expandedAnalysisId,
+  });
+
+  const policyCheckQuery = useQuery({
+    queryKey: ['cases', caseId, 'policy-check'],
+    queryFn: () =>
+      apiCall<PolicyCheckResponse>(() => bindApi.cases({ case_id: caseId })['policy-check'].get()),
+    enabled: false,
   });
 
   const transitionMutation = useMutation({
@@ -133,6 +104,16 @@ function CaseDetail() {
     },
   });
 
+  const policyCheckMutation = useMutation({
+    mutationFn: (data: { requirements_document_id: string; target_document_id: string }) =>
+      apiCall<PolicyCheckResponse>(() =>
+        bindApi.cases({ case_id: caseId })['policy-check'].post(data)
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'policy-check'] });
+    },
+  });
+
   function handleAddDocument(e: React.FormEvent) {
     e.preventDefault();
     addDocumentMutation.mutate({
@@ -142,59 +123,29 @@ function CaseDetail() {
     });
   }
 
+  function handleRunPolicyCheck() {
+    if (!policyCheckReqDocId || !policyCheckTargetDocId) return;
+    policyCheckMutation.mutate({
+      requirements_document_id: policyCheckReqDocId,
+      target_document_id: policyCheckTargetDocId,
+    });
+  }
+
   const actionError =
     transitionMutation.error ??
     addDocumentMutation.error ??
     deleteDocumentMutation.error ??
-    analyzeMutation.error;
+    analyzeMutation.error ??
+    policyCheckMutation.error;
 
-  async function handleViewAnalysis(documentId: string) {
-    if (expandedAnalysisId === documentId) {
-      setExpandedAnalysisId(null);
-      return;
-    }
-    setActionError(null);
-    try {
-      const result = await apiCall<{ result: unknown }>(() =>
-        bindApi.cases({ case_id: caseId }).documents({ document_id: documentId }).analysis.get()
-      );
-      setAnalysisResults((prev) => ({ ...prev, [documentId]: result }));
-      setExpandedAnalysisId(documentId);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Failed to load analysis');
-    }
-  }
+  if (caseQuery.isLoading) return <main className="p-4">Loading...</main>;
+  if (caseQuery.error)
+    return <main className="text-destructive p-4">{caseQuery.error.message}</main>;
+  if (!caseQuery.data) return null;
 
-  async function handleRunPolicyCheck() {
-    if (!policyCheckReqDocId || !policyCheckTargetDocId) return;
-    setPolicyCheckRunning(true);
-    setActionError(null);
-    try {
-      const result = await apiCall<PolicyCheckResponse>(() =>
-        bindApi.cases({ case_id: caseId })['policy-check'].post({
-          requirements_document_id: policyCheckReqDocId,
-          target_document_id: policyCheckTargetDocId,
-        })
-      );
-      setPolicyCheckResult(result);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Policy check failed');
-    } finally {
-      setPolicyCheckRunning(false);
-    }
-  }
-
-  async function handleFetchLatestPolicyCheck() {
-    setActionError(null);
-    try {
-      const result = await apiCall<PolicyCheckResponse>(() =>
-        bindApi.cases({ case_id: caseId })['policy-check'].get()
-      );
-      setPolicyCheckResult(result);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Failed to fetch policy check');
-    }
-  }
+  const caseData = caseQuery.data;
+  const documents = documentsQuery.data ?? [];
+  const status = caseData.status as 'draft' | 'in_review' | 'completed' | 'cancelled';
 
   const requirementsDocs = documents.filter(
     (d) => d.document_type === 'contract_requirements' && d.analysis_status === 'completed'
@@ -205,13 +156,7 @@ function CaseDetail() {
       d.analysis_status === 'completed'
   );
 
-  if (loading) return <main style={{ padding: '1rem' }}>Loading...</main>;
-  if (error) return <main style={{ padding: '1rem', color: 'red' }}>{error}</main>;
-  if (!caseData) return null;
-
-  const caseData = caseQuery.data;
-  const documents = documentsQuery.data ?? [];
-  const status = caseData.status as 'draft' | 'in_review' | 'completed' | 'cancelled';
+  const policyCheckResult = policyCheckMutation.data ?? policyCheckQuery.data;
 
   return (
     <main data-testid="case-detail" className="mx-auto max-w-3xl p-4">
@@ -356,7 +301,7 @@ function CaseDetail() {
             {expandedAnalysisId === doc.id && analysisQuery.data && (
               <pre
                 data-testid={`analysis-result-${doc.id}`}
-                className="border-border bg-muted mb-2 max-h-96 overflow-auto rounded-md border p-3 text-xs"
+                className="bg-muted border-border mb-2 max-h-96 overflow-auto rounded-md border p-3 text-xs"
               >
                 {JSON.stringify(analysisQuery.data, null, 2)}
               </pre>
@@ -368,41 +313,30 @@ function CaseDetail() {
         )}
       </ul>
 
-      <hr style={{ margin: '1.5rem 0' }} />
+      <hr className="border-border my-6" />
 
       <div data-testid="policy-check-section">
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}
-        >
-          <h2 style={{ margin: 0 }}>Policy Check</h2>
+        <div className="mb-3 flex items-center gap-4">
+          <h2 className="text-xl font-semibold">Policy Check</h2>
           <Button
             data-testid="fetch-latest-policy-check"
             variant="outline"
             size="sm"
-            onClick={handleFetchLatestPolicyCheck}
+            disabled={policyCheckQuery.isFetching}
+            onClick={() => policyCheckQuery.refetch()}
           >
             Load Latest
           </Button>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: '0.5rem',
-            flexWrap: 'wrap',
-            alignItems: 'flex-end',
-            marginBottom: '1rem',
-          }}
-        >
+        <div className="mb-4 flex flex-wrap items-end gap-2">
           <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.25rem' }}>
-              Requirements Document
-            </label>
+            <label className="mb-1 block text-xs">Requirements Document</label>
             <select
               data-testid="policy-check-req-select"
               value={policyCheckReqDocId}
               onChange={(e) => setPolicyCheckReqDocId(e.target.value)}
-              style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
+              className="border-input rounded-md border px-3 py-1.5 text-sm"
             >
               <option value="">-- select --</option>
               {requirementsDocs.map((d) => (
@@ -413,14 +347,12 @@ function CaseDetail() {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.25rem' }}>
-              Target Document
-            </label>
+            <label className="mb-1 block text-xs">Target Document</label>
             <select
               data-testid="policy-check-target-select"
               value={policyCheckTargetDocId}
               onChange={(e) => setPolicyCheckTargetDocId(e.target.value)}
-              style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
+              className="border-input rounded-md border px-3 py-1.5 text-sm"
             >
               <option value="">-- select --</option>
               {targetDocs.map((d) => (
@@ -432,10 +364,12 @@ function CaseDetail() {
           </div>
           <Button
             data-testid="run-policy-check"
-            disabled={!policyCheckReqDocId || !policyCheckTargetDocId || policyCheckRunning}
+            disabled={
+              !policyCheckReqDocId || !policyCheckTargetDocId || policyCheckMutation.isPending
+            }
             onClick={handleRunPolicyCheck}
           >
-            {policyCheckRunning ? 'Running...' : 'Run Check'}
+            {policyCheckMutation.isPending ? 'Running...' : 'Run Check'}
           </Button>
         </div>
 
@@ -443,46 +377,34 @@ function CaseDetail() {
           <div data-testid="policy-check-results">
             <div
               data-testid="policy-check-summary"
-              style={{
-                display: 'flex',
-                gap: '0.75rem',
-                padding: '0.5rem 0.75rem',
-                background: '#f5f5f5',
-                borderRadius: '4px',
-                fontSize: '0.85rem',
-                marginBottom: '0.75rem',
-              }}
+              className="bg-muted mb-3 flex gap-3 rounded-md px-3 py-2 text-sm"
             >
-              <span style={{ color: '#065f46' }}>{policyCheckResult.summary_counts.ok} OK</span>
-              <span style={{ color: '#9a3412' }}>{policyCheckResult.summary_counts.gap} Gap</span>
-              <span style={{ color: '#991b1b' }}>
+              <span className="text-green-800">{policyCheckResult.summary_counts.ok} OK</span>
+              <span className="text-orange-800">{policyCheckResult.summary_counts.gap} Gap</span>
+              <span className="text-red-800">
                 {policyCheckResult.summary_counts.missing} Missing
               </span>
-              <span style={{ color: '#854d0e' }}>
+              <span className="text-yellow-800">
                 {policyCheckResult.summary_counts.review} Review
               </span>
-              <span style={{ color: '#6b7280' }}>
+              <span className="text-muted-foreground">
                 {policyCheckResult.summary_counts.not_applicable} N/A
               </span>
             </div>
 
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {policyCheckResult.results.map((r) => (
+            <ul className="space-y-0">
+              {policyCheckResult.results.map((r: CheckResultItem) => (
                 <li
                   key={r.check_id}
                   data-testid={`policy-check-item-${r.check_id}`}
-                  style={{ padding: '0.5rem 0', borderBottom: '1px solid #eee' }}
+                  className="border-border border-b py-2"
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div className="flex items-center gap-2">
                     <VerdictBadge verdict={r.verdict} />
-                    <span style={{ fontWeight: 500 }}>{r.check_name}</span>
-                    <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: 'auto' }}>
-                      {r.severity}
-                    </span>
+                    <span className="font-medium">{r.check_name}</span>
+                    <span className="text-muted-foreground ml-auto text-xs">{r.severity}</span>
                   </div>
-                  <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#444' }}>
-                    {r.message}
-                  </p>
+                  <p className="text-foreground/70 mt-1 text-sm">{r.message}</p>
                 </li>
               ))}
             </ul>
@@ -508,30 +430,18 @@ function AnalysisStatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-const VERDICT_COLORS: Record<PolicyCheckResult['verdict'], { background: string; color: string }> =
-  {
-    ok: { background: '#d1fae5', color: '#065f46' },
-    gap: { background: '#ffedd5', color: '#9a3412' },
-    missing: { background: '#fee2e2', color: '#991b1b' },
-    review: { background: '#fef3c7', color: '#854d0e' },
-    not_applicable: { background: '#e5e7eb', color: '#6b7280' },
-  };
+const VERDICT_VARIANT: Record<CheckVerdict, BadgeVariant> = {
+  ok: 'default',
+  gap: 'secondary',
+  missing: 'destructive',
+  review: 'outline',
+  not_applicable: 'outline',
+};
 
-function VerdictBadge({ verdict }: { verdict: PolicyCheckResult['verdict'] }) {
-  const colors = VERDICT_COLORS[verdict];
+function VerdictBadge({ verdict }: { verdict: CheckVerdict }) {
   return (
-    <span
-      data-testid={`verdict-badge-${verdict}`}
-      style={{
-        fontSize: '0.7rem',
-        padding: '0.15rem 0.5rem',
-        borderRadius: '9999px',
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        ...colors,
-      }}
-    >
+    <Badge data-testid={`verdict-badge-${verdict}`} variant={VERDICT_VARIANT[verdict]}>
       {verdict.replace('_', ' ')}
-    </span>
+    </Badge>
   );
 }

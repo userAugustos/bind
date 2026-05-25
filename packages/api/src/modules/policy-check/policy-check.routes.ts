@@ -1,40 +1,12 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
+import { z } from 'zod';
 
+import { PolicyCheckResponseSchema } from './policy-check.schemas';
 import { policyCheckService } from './policy-check.service';
 
-const CheckEvidenceResponseSchema = t.Object({
-  requirement_source: t.String(),
-  found_value: t.Nullable(t.String()),
-  document_id: t.String(),
-  page_numbers: t.Array(t.Number()),
-});
-
-const CheckResultItemResponseSchema = t.Object({
-  check_id: t.String(),
-  check_name: t.String(),
-  verdict: t.String(),
-  severity: t.String(),
-  message: t.String(),
-  evidence: CheckEvidenceResponseSchema,
-});
-
-const SummaryCountsResponseSchema = t.Object({
-  ok: t.Number(),
-  gap: t.Number(),
-  missing: t.Number(),
-  review: t.Number(),
-  not_applicable: t.Number(),
-});
-
-const PolicyCheckResponseSchema = t.Object({
-  id: t.String(),
-  case_id: t.String(),
-  requirements_document_id: t.String(),
-  target_document_id: t.String(),
-  target_document_type: t.String(),
-  results: t.Array(CheckResultItemResponseSchema),
-  summary_counts: SummaryCountsResponseSchema,
-  created_at: t.String(),
+const RunPolicyCheckBody = z.object({
+  requirements_document_id: z.string(),
+  target_document_id: z.string(),
 });
 
 export const policyCheckRoutes = new Elysia({ prefix: '/cases' })
@@ -49,11 +21,8 @@ export const policyCheckRoutes = new Elysia({ prefix: '/cases' })
       );
     },
     {
-      params: t.Object({ case_id: t.String() }),
-      body: t.Object({
-        requirements_document_id: t.String(),
-        target_document_id: t.String(),
-      }),
+      params: z.object({ case_id: z.string() }),
+      body: RunPolicyCheckBody,
       response: { 201: PolicyCheckResponseSchema },
       detail: { summary: 'Run policy check', tags: ['policy-check'] },
     }
@@ -63,8 +32,8 @@ export const policyCheckRoutes = new Elysia({ prefix: '/cases' })
     async ({ params, query }) =>
       policyCheckService.getLatestResult(params.case_id, query.target_document_id),
     {
-      params: t.Object({ case_id: t.String() }),
-      query: t.Object({ target_document_id: t.Optional(t.String()) }),
+      params: z.object({ case_id: z.string() }),
+      query: z.object({ target_document_id: z.string().optional() }),
       response: { 200: PolicyCheckResponseSchema },
       detail: { summary: 'Get latest policy check result', tags: ['policy-check'] },
     }
@@ -74,9 +43,9 @@ export const policyCheckRoutes = new Elysia({ prefix: '/cases' })
     async ({ params, query }) =>
       policyCheckService.getHistory(params.case_id, query.target_document_id),
     {
-      params: t.Object({ case_id: t.String() }),
-      query: t.Object({ target_document_id: t.Optional(t.String()) }),
-      response: { 200: t.Array(PolicyCheckResponseSchema) },
+      params: z.object({ case_id: z.string() }),
+      query: z.object({ target_document_id: z.string().optional() }),
+      response: { 200: z.array(PolicyCheckResponseSchema) },
       detail: { summary: 'Get policy check history', tags: ['policy-check'] },
     }
   );
