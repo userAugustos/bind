@@ -1,4 +1,4 @@
-import { t } from 'elysia';
+import { z } from 'zod';
 
 export const CaseStatusValues = ['draft', 'in_review', 'completed', 'cancelled'] as const;
 export type CaseStatus = (typeof CaseStatusValues)[number];
@@ -15,36 +15,30 @@ export type CaseResponseType = {
   updated_at: string;
 };
 
-export const CreateCaseBody = t.Object({
-  case_name: t.String({ minLength: 1 }),
-  client_name: t.String({ minLength: 1 }),
+export const CreateCaseBody = z.object({
+  case_name: z.string().min(1),
+  client_name: z.string().min(1),
 });
 
-export const UpdateCaseBody = t.Object(
-  {
-    case_name: t.Optional(t.String({ minLength: 1 })),
-    client_name: t.Optional(t.String({ minLength: 1 })),
-  },
-  {
-    additionalProperties: false,
-    minProperties: 1,
-  }
-);
+export const UpdateCaseBody = z
+  .object({
+    case_name: z.string().min(1).optional(),
+    client_name: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((body) => Object.keys(body).length > 0, 'Expected object to have at least 1 properties');
 
-export const TransitionBody = t.Object({
-  event: t.Union([t.Literal('submit'), t.Literal('complete'), t.Literal('cancel')]),
+export const TransitionBody = z.object({
+  event: z.enum(CaseEventValues),
 });
 
-export const CaseResponse = t.Object({
-  id: t.String(),
-  case_name: t.String(),
-  client_name: t.String(),
-  status: t.Union([
-    t.Literal('draft'),
-    t.Literal('in_review'),
-    t.Literal('completed'),
-    t.Literal('cancelled'),
-  ]),
-  created_at: t.String(),
-  updated_at: t.String(),
+export const CaseResponse = z.object({
+  id: z.string(),
+  case_name: z.string(),
+  client_name: z.string(),
+  status: z.enum(CaseStatusValues),
+  created_at: z.string(),
+  updated_at: z.string(),
 });
+
+export const CaseParams = z.object({ case_id: z.string() });

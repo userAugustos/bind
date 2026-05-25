@@ -1,6 +1,8 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
+import { z } from 'zod';
 
 import {
+  CaseParams,
   CaseResponse,
   CreateCaseBody,
   TransitionBody,
@@ -22,11 +24,11 @@ export const reviewCasesRoutes = new Elysia({ prefix: '/cases' })
     }
   )
   .get('/', async () => reviewCasesService.getCases(), {
-    response: { 200: t.Array(CaseResponse) },
+    response: { 200: z.array(CaseResponse) },
     detail: { summary: 'List review cases', tags: ['review-cases'] },
   })
   .get('/:case_id', async ({ params }) => reviewCasesService.getCase(params.case_id), {
-    params: t.Object({ case_id: t.String() }),
+    params: CaseParams,
     response: { 200: CaseResponse },
     detail: { summary: 'Get a review case', tags: ['review-cases'] },
   })
@@ -34,7 +36,7 @@ export const reviewCasesRoutes = new Elysia({ prefix: '/cases' })
     '/:case_id',
     async ({ params, body }) => reviewCasesService.updateCase(params.case_id, body),
     {
-      params: t.Object({ case_id: t.String() }),
+      params: CaseParams,
       body: UpdateCaseBody,
       response: { 200: CaseResponse },
       detail: { summary: 'Update a review case', tags: ['review-cases'] },
@@ -44,7 +46,7 @@ export const reviewCasesRoutes = new Elysia({ prefix: '/cases' })
     '/:case_id/transition',
     async ({ params, body }) => reviewCasesService.transitionCase(params.case_id, body.event),
     {
-      params: t.Object({ case_id: t.String() }),
+      params: CaseParams,
       body: TransitionBody,
       response: { 200: CaseResponse },
       detail: { summary: 'Transition case status', tags: ['review-cases'] },
@@ -57,7 +59,7 @@ export const reviewCasesRoutes = new Elysia({ prefix: '/cases' })
       set.status = 204;
     },
     {
-      params: t.Object({ case_id: t.String() }),
+      params: CaseParams,
       detail: { summary: 'Delete a review case', tags: ['review-cases'] },
     }
   );

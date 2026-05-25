@@ -58,6 +58,7 @@ Organized by domain modules in `src/modules/`. Each module follows a layered pat
 Key conventions:
 
 - **Errors** — Throw `AppError` via helpers: `badRequest()`, `notFound()`, `conflict()`, etc. The error plugin in `@core/errors` translates to JSON envelopes — no manual try/catch for response mapping.
+- **Validation** — Zod is mandatory for API validation and response schemas. Do not import or use Elysia TypeBox helpers (`t`) or TypeBox `Static`; `import { t } from 'elysia'` is forbidden.
 - **Config/Logging** — Use `@core/env` and `@core/logger`. Never `Bun.env` or `console.*` in feature modules.
 - **Telemetry** — `record()` for spans, `emitMetric()` for metrics, `withTraceContext()` for distributed tracing.
 - **API payloads** — snake_case to match clients.

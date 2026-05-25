@@ -1,4 +1,4 @@
-import { t } from 'elysia';
+import { z } from 'zod';
 
 export const DocumentTypeValues = [
   'contract_requirements',
@@ -22,35 +22,21 @@ export type DocumentResponseType = {
   created_at: string;
 };
 
-export const CreateDocumentBody = t.Object({
-  file_name: t.String({ minLength: 1 }),
-  mime_type: t.String({ minLength: 1 }),
-  document_type: t.Union([
-    t.Literal('contract_requirements'),
-    t.Literal('current_policy'),
-    t.Literal('carrier_quote'),
-    t.Literal('loss_history'),
-    t.Literal('other'),
-  ]),
+export const CreateDocumentBody = z.object({
+  file_name: z.string().min(1),
+  mime_type: z.string().min(1),
+  document_type: z.enum(DocumentTypeValues),
 });
 
-export const DocumentResponse = t.Object({
-  id: t.String(),
-  case_id: t.String(),
-  file_name: t.String(),
-  mime_type: t.String(),
-  document_type: t.Union([
-    t.Literal('contract_requirements'),
-    t.Literal('current_policy'),
-    t.Literal('carrier_quote'),
-    t.Literal('loss_history'),
-    t.Literal('other'),
-  ]),
-  analysis_status: t.Union([
-    t.Literal('pending'),
-    t.Literal('processing'),
-    t.Literal('completed'),
-    t.Literal('failed'),
-  ]),
-  created_at: t.String(),
+export const DocumentResponse = z.object({
+  id: z.string(),
+  case_id: z.string(),
+  file_name: z.string(),
+  mime_type: z.string(),
+  document_type: z.enum(DocumentTypeValues),
+  analysis_status: z.enum(AnalysisStatusValues),
+  created_at: z.string(),
 });
+
+export const DocumentCaseParams = z.object({ case_id: z.string() });
+export const DocumentParams = z.object({ case_id: z.string(), document_id: z.string() });
