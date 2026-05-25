@@ -14,6 +14,7 @@ This document is a living feature plan. It describes product capabilities, featu
 
 Branch: `feat/review-case-foundation` — PR #1.
 Branch: `feat/ai-document-analysis` — PR #2 (targets `feat/review-case-foundation`).
+Branch: `feat/policy-check` — PR #3 (targets `feat/ai-document-analysis`).
 
 ### Status by feature
 
@@ -22,7 +23,7 @@ Branch: `feat/ai-document-analysis` — PR #2 (targets `feat/review-case-foundat
 | Review Case              | Partial     | Metadata CRUD + status state machine done. Not yet linked to downstream feature outputs.                                                                                                |
 | Document Vault           | Partial     | Metadata CRUD done. No PDF upload/storage, no analysis results, several metadata fields deferred.                                                                                       |
 | AI Document Analysis     | Partial     | LLM adapter (Mock + Modal), Zod schemas, analysis CRUD, status state machine, 10 e2e tests, simple testing UI. No PDF upload/conversion, no prompt files, no real Modal deployment yet. |
-| Policy Check             | Not started | —                                                                                                                                                                                       |
+| Policy Check             | Partial     | 5 deterministic checks, CRUD, 9 e2e tests, simple UI. No limit_basis comparison, no page evidence enrichment.                                                                           |
 | Quote Comparison         | Not started | —                                                                                                                                                                                       |
 | Proposal / Decision Memo | Not started | —                                                                                                                                                                                       |
 
@@ -96,17 +97,56 @@ Branch: `feat/ai-document-analysis` — PR #2 (targets `feat/review-case-foundat
 - **JSON in TEXT column.** Analysis results are stored as serialized JSON in a TEXT column. Sufficient for current needs.
 - **Re-analysis of completed documents is blocked.** The state machine does not allow `start` from `completed`. A `reanalyze` event can be added later if needed.
 
-### Open decisions for next iteration
+### Open decisions for next iteration (from iteration 2)
 
 1. **Re-analysis path.** Should completed documents support re-analysis via a `reanalyze` event? Currently blocked.
 2. **Async analysis.** If Modal latency is too high for synchronous calls, should the endpoint become async (webhook/polling)?
-3. **Next feature to build.** Plan ordering suggests Policy Check, consuming the analysis payloads for deterministic requirement comparison.
-4. Open decisions from iteration 1 still apply (PATCH on terminal cases, case delete behavior).
+3. Open decisions from iteration 1 still apply (PATCH on terminal cases, case delete behavior).
 
 ### Known follow-ups (non-blocking, from iteration 2 review)
 
 - Unify `AnalysisStates` (state machine) with `AnalysisStatusValues` (documents schema) — two sources for the same enum.
 - `SCHEMA_BY_DOCUMENT_TYPE` is exported but unused — either use it in validation or remove it.
+
+### Iteration 3 — done (PR #3)
+
+**Policy Check**
+
+- Table `policy_check_results` with `id`, `case_id` (FK restrict), `requirements_document_id` (FK cascade), `target_document_id` (FK cascade), `target_document_type`, `results` (JSON array), `summary_counts` (JSON), `created_at`.
+- 5 deterministic requirement check functions (pure business logic, no LLM):
+  1. `cgl_limit` — Commercial General Liability limit comparison
+  2. `auto_limit` — Commercial Auto Liability limit comparison
+  3. `cyber_coverage` — Cyber Liability coverage/limit check
+  4. `additional_insured` — Additional Insured endorsement presence
+  5. `waiver_primary` — Waiver of Subrogation + Primary/Non-Contributory endorsement presence
+- Verdict types: `ok`, `gap`, `missing`, `review`, `not_applicable`
+- Severity levels: `blocking`, `material`, `minor`, `informational`
+- Evidence trails: each result records what was required, what was found, and the source document
+- One-shot computation — no state machine needed. POST runs the check synchronously, stores result, returns 201.
+- Re-running checks is allowed (each POST creates a new row). GET returns latest, GET /history returns all.
+- String matching: case-insensitive `includes()` for coverage_type / endorsement_type matching.
+- Routes: `POST /cases/:case_id/policy-check`, `GET .../policy-check`, `GET .../policy-check/history`.
+- SDK exports: `@bind/api/policy-check` (types: PolicyCheckResponse, CheckResultItem, SummaryCounts, CheckVerdict, CheckSeverity, CheckEvidence).
+- 9 e2e tests covering: all-OK scenario (Carrier B), gaps/missing scenario (current policy), error cases, filtering, history.
+- Simple throwaway UI: run policy check with document selection, view results with colored verdict badges.
+
+### Deviations from the plan (iteration 3)
+
+- **No `limit_basis` comparison.** The plan mentions checking per-occurrence vs aggregate, but for this iteration we only compare `limit_amount` values. Basis mismatch could be added as a `review` verdict later.
+- **`page_numbers` always empty.** Evidence schema includes page references but check functions don't currently populate them from the analysis evidence. Available for future enrichment.
+- **Elysia route schema uses `t.String()` for verdict/severity** instead of union literals. Zod schemas have proper enums but OpenAPI spec is loose. Acceptable for current stage.
+
+### Open decisions for next iteration (from iteration 3)
+
+1. **Next feature to build.** Plan ordering suggests Quote Comparison, then Proposal / Decision Memo.
+2. **Limit basis comparison.** Should different `limit_basis` values (per occurrence vs aggregate) trigger a `review` verdict?
+3. **Evidence enrichment.** Should check functions pull page numbers from the analysis evidence into the check evidence?
+4. Previous open decisions still apply (re-analysis path, async analysis, PATCH on terminal cases).
+
+### Known follow-ups (non-blocking, from iteration 3 review)
+
+- Waiver/primary keyword matching is permissive (single-keyword substring match) — could produce false positives with complex endorsement names.
+- Route response schemas should use `t.Union` with literals for proper OpenAPI enum documentation.
 
 ## Demo Scenario
 
