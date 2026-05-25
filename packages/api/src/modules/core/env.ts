@@ -20,6 +20,11 @@ export const config = {
   database: {
     path: env.DATABASE_PATH ?? './data/bind.db',
   },
+  modal: {
+    endpoint: env.MODAL_ENDPOINT ?? '',
+    key: env.MODAL_KEY ?? '',
+    secret: env.MODAL_SECRET ?? '',
+  },
 };
 
 export type Config = typeof config;

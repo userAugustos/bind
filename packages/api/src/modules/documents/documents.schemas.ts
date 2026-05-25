@@ -1,5 +1,4 @@
 import { t } from 'elysia';
-import type { Static } from 'elysia';
 
 export const DocumentTypeValues = [
   'contract_requirements',
@@ -35,4 +34,12 @@ export const DocumentResponse = t.Object({
   created_at: t.String(),
 });
 
-export type DocumentResponseType = Static<typeof DocumentResponse>;
+export interface DocumentResponseType {
+  id: string;
+  case_id: string;
+  file_name: string;
+  mime_type: string;
+  document_type: string;
+  analysis_status: string;
+  created_at: string;
+}

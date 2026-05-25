@@ -38,3 +38,24 @@ export const documents = sqliteTable('documents', {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
+
+export const documentAnalyses = sqliteTable('document_analyses', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  documentId: text('document_id')
+    .notNull()
+    .references(() => documents.id, { onDelete: 'cascade' }),
+  documentType: text('document_type').notNull(),
+  status: text('status').notNull().default('completed'),
+  result: text('result').notNull(),
+  error: text('error'),
+  promptName: text('prompt_name').notNull(),
+  promptVersion: text('prompt_version').notNull(),
+  schemaVersion: text('schema_version').notNull(),
+  modelProvider: text('model_provider').notNull(),
+  modelName: text('model_name').notNull(),
+  createdAt: text('created_at')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
