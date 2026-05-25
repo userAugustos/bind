@@ -117,9 +117,6 @@ function CaseDetail() {
       apiCall<PolicyCheckResponse>(() =>
         bindApi.cases({ case_id: caseId })['policy-check'].post(data)
       ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'policy-check'] });
-    },
   });
 
   const quoteComparisonMutation = useMutation({
@@ -134,9 +131,6 @@ function CaseDetail() {
 
   const memoMutation = useMutation({
     mutationFn: () => apiCall<MemoResponse>(() => bindApi.cases({ case_id: caseId }).memo.post({})),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'memo'] });
-    },
   });
 
   function handleAddDocument(e: React.FormEvent) {
@@ -163,7 +157,10 @@ function CaseDetail() {
     analyzeMutation.error ??
     policyCheckMutation.error ??
     quoteComparisonMutation.error ??
-    memoMutation.error;
+    memoMutation.error ??
+    documentsQuery.error ??
+    policyCheckQuery.error ??
+    memoQuery.error;
 
   if (caseQuery.isLoading) return <main className="p-4">Loading...</main>;
   if (caseQuery.error)
@@ -591,17 +588,22 @@ function AnalysisStatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-const VERDICT_VARIANT: Record<CheckVerdict, BadgeVariant> = {
-  ok: 'default',
-  gap: 'secondary',
-  missing: 'destructive',
-  review: 'outline',
-  not_applicable: 'outline',
+const VERDICT_STYLES: Record<CheckVerdict, { variant: BadgeVariant; className?: string }> = {
+  ok: { variant: 'default' },
+  gap: { variant: 'outline', className: 'border-orange-300 bg-orange-50 text-orange-800' },
+  missing: { variant: 'destructive' },
+  review: { variant: 'outline', className: 'border-yellow-300 bg-yellow-50 text-yellow-800' },
+  not_applicable: { variant: 'outline' },
 };
 
 function VerdictBadge({ verdict }: { verdict: CheckVerdict }) {
+  const style = VERDICT_STYLES[verdict];
   return (
-    <Badge data-testid={`verdict-badge-${verdict}`} variant={VERDICT_VARIANT[verdict]}>
+    <Badge
+      data-testid={`verdict-badge-${verdict}`}
+      variant={style.variant}
+      className={style.className}
+    >
       {verdict.replace('_', ' ')}
     </Badge>
   );
