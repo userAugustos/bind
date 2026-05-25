@@ -1,27 +1,9 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
+import { z } from 'zod';
 
-import { MEMO_SECTIONS } from './memo.schemas';
+import { MEMO_SECTIONS, MemoResponseSchema } from './memo.schemas';
 import { memoService } from './memo.service';
 import type { MemoContent, MemoSection } from './memo.schemas';
-
-const MemoContentResponseSchema = t.Object({
-  executive_summary: t.String(),
-  coverage_gaps: t.String(),
-  quote_comparison: t.String(),
-  recommendation: t.String(),
-  next_steps: t.Array(t.String()),
-});
-
-const MemoResponseSchema = t.Object({
-  id: t.String(),
-  case_id: t.String(),
-  status: t.String(),
-  content: t.Nullable(MemoContentResponseSchema),
-  error: t.Nullable(t.String()),
-  model_provider: t.String(),
-  model_name: t.String(),
-  created_at: t.String(),
-});
 
 const SECTION_DELAY_MS = 3000;
 
@@ -41,13 +23,13 @@ export const memoRoutes = new Elysia({ prefix: '/cases' })
       return memoService.generateMemo(params.case_id);
     },
     {
-      params: t.Object({ case_id: t.String() }),
+      params: z.object({ case_id: z.string() }),
       response: { 201: MemoResponseSchema },
       detail: { summary: 'Generate proposal memo', tags: ['memo'] },
     }
   )
   .get('/:case_id/memo', async ({ params }) => memoService.getLatestMemo(params.case_id), {
-    params: t.Object({ case_id: t.String() }),
+    params: z.object({ case_id: z.string() }),
     response: { 200: MemoResponseSchema },
     detail: { summary: 'Get latest proposal memo', tags: ['memo'] },
   })
@@ -65,7 +47,7 @@ export const memoRoutes = new Elysia({ prefix: '/cases' })
       yield { event: 'done', data: JSON.stringify({ section: 'done' }) };
     },
     {
-      params: t.Object({ case_id: t.String() }),
+      params: z.object({ case_id: z.string() }),
       detail: { summary: 'Stream proposal memo sections via SSE', tags: ['memo'] },
     }
   );
