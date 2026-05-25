@@ -3,13 +3,13 @@ import { count, eq } from 'drizzle-orm';
 import { db } from '@api/db/client';
 import { documents } from '@api/db/schema';
 
-import type { DocumentResponseType } from './documents.schemas';
+import type { AnalysisStatus, DocumentResponseType, DocumentType } from './documents.schemas';
 
 type InsertDocument = {
   case_id: string;
   file_name: string;
   mime_type: string;
-  document_type: string;
+  document_type: DocumentType;
 };
 
 const toResponse = (row: typeof documents.$inferSelect): DocumentResponseType => ({
@@ -17,8 +17,8 @@ const toResponse = (row: typeof documents.$inferSelect): DocumentResponseType =>
   case_id: row.caseId,
   file_name: row.fileName,
   mime_type: row.mimeType,
-  document_type: row.documentType,
-  analysis_status: row.analysisStatus,
+  document_type: row.documentType as DocumentType,
+  analysis_status: row.analysisStatus as AnalysisStatus,
   created_at: row.createdAt,
 });
 

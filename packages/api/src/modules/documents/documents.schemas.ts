@@ -1,5 +1,4 @@
 import { t } from 'elysia';
-import type { Static } from 'elysia';
 
 export const DocumentTypeValues = [
   'contract_requirements',
@@ -12,6 +11,16 @@ export type DocumentType = (typeof DocumentTypeValues)[number];
 
 export const AnalysisStatusValues = ['pending', 'processing', 'completed', 'failed'] as const;
 export type AnalysisStatus = (typeof AnalysisStatusValues)[number];
+
+export type DocumentResponseType = {
+  id: string;
+  case_id: string;
+  file_name: string;
+  mime_type: string;
+  document_type: DocumentType;
+  analysis_status: AnalysisStatus;
+  created_at: string;
+};
 
 export const CreateDocumentBody = t.Object({
   file_name: t.String({ minLength: 1 }),
@@ -30,9 +39,18 @@ export const DocumentResponse = t.Object({
   case_id: t.String(),
   file_name: t.String(),
   mime_type: t.String(),
-  document_type: t.String(),
-  analysis_status: t.String(),
+  document_type: t.Union([
+    t.Literal('contract_requirements'),
+    t.Literal('current_policy'),
+    t.Literal('carrier_quote'),
+    t.Literal('loss_history'),
+    t.Literal('other'),
+  ]),
+  analysis_status: t.Union([
+    t.Literal('pending'),
+    t.Literal('processing'),
+    t.Literal('completed'),
+    t.Literal('failed'),
+  ]),
   created_at: t.String(),
 });
-
-export type DocumentResponseType = Static<typeof DocumentResponse>;

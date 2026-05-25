@@ -23,7 +23,7 @@ function Root() {
         <Link to="/" style={{ color: '#0070f3' }}>
           Home
         </Link>
-        <Link to="/cases/" style={{ color: '#0070f3' }}>
+        <Link to="/cases" style={{ color: '#0070f3' }}>
           Cases
         </Link>
       </nav>

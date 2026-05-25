@@ -1,10 +1,28 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useReducer } from 'react';
+import type { FormEvent } from 'react';
 
 import type { DocumentResponseType, DocumentType } from '@bind/api/documents';
 import type { CaseEvent, CaseResponseType } from '@bind/api/review-cases';
 
 import { Button } from '@repo/ui/shadcn/button';
+import { Input } from '@repo/ui/shadcn/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@repo/ui/shadcn/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@repo/ui/shadcn/table';
 import { apiCall, bindApi } from '@/api';
 
 export const Route = createFileRoute('/cases/$caseId')({ component: CaseDetail });
@@ -17,140 +35,168 @@ const DOCUMENT_TYPES: DocumentType[] = [
   'other',
 ];
 
+const caseQueryKey = (caseId: string) => ['cases', caseId] as const;
+const documentsQueryKey = (caseId: string) => ['cases', caseId, 'documents'] as const;
+
+type DocumentFormState = {
+  visible: boolean;
+  fileName: string;
+  documentType: DocumentType;
+};
+
+type DocumentFormEvent =
+  | { type: 'toggle' }
+  | { type: 'fileName.changed'; value: string }
+  | { type: 'documentType.changed'; value: DocumentType }
+  | { type: 'reset' };
+
+const initialDocumentForm: DocumentFormState = {
+  visible: false,
+  fileName: '',
+  documentType: 'other',
+};
+
+function documentFormReducer(
+  state: DocumentFormState,
+  event: DocumentFormEvent
+): DocumentFormState {
+  switch (event.type) {
+    case 'toggle':
+      return { ...state, visible: !state.visible };
+    case 'fileName.changed':
+      return { ...state, fileName: event.value };
+    case 'documentType.changed':
+      return { ...state, documentType: event.value };
+    case 'reset':
+      return initialDocumentForm;
+  }
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function isDocumentType(value: string): value is DocumentType {
+  return DOCUMENT_TYPES.includes(value as DocumentType);
+}
+
 function CaseDetail() {
   const { caseId } = Route.useParams();
+  const queryClient = useQueryClient();
+  const [documentForm, dispatchDocumentForm] = useReducer(documentFormReducer, initialDocumentForm);
 
-  const [caseData, setCaseData] = useState<CaseResponseType | null>(null);
-  const [documents, setDocuments] = useState<DocumentResponseType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const caseQuery = useQuery({
+    queryKey: caseQueryKey(caseId),
+    queryFn: () => apiCall<CaseResponseType>(() => bindApi.cases({ case_id: caseId }).get()),
+  });
 
-  const [showDocForm, setShowDocForm] = useState(false);
-  const [fileName, setFileName] = useState('');
-  const [documentType, setDocumentType] = useState<DocumentType>('other');
-  const [submittingDoc, setSubmittingDoc] = useState(false);
+  const documentsQuery = useQuery({
+    queryKey: documentsQueryKey(caseId),
+    queryFn: () =>
+      apiCall<DocumentResponseType[]>(() => bindApi.cases({ case_id: caseId }).documents.get()),
+  });
 
-  async function fetchCase() {
-    try {
-      const data = await apiCall<CaseResponseType>(() => bindApi.cases({ case_id: caseId }).get());
-      setCaseData(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load case');
-    }
-  }
+  const transitionMutation = useMutation({
+    mutationFn: (event: CaseEvent) =>
+      apiCall<CaseResponseType>(() =>
+        bindApi.cases({ case_id: caseId }).transition.post({ event })
+      ),
+    onSuccess: (updatedCase) => {
+      queryClient.setQueryData(caseQueryKey(caseId), updatedCase);
+    },
+  });
 
-  async function fetchDocuments() {
-    try {
-      const data = await apiCall<DocumentResponseType[]>(() =>
-        bindApi.cases({ case_id: caseId }).documents.get()
-      );
-      setDocuments(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load documents');
-    }
-  }
-
-  async function loadAll() {
-    setLoading(true);
-    setError(null);
-    await Promise.all([fetchCase(), fetchDocuments()]);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    void loadAll();
-  }, [caseId]);
-
-  async function handleTransition(event: CaseEvent) {
-    setActionError(null);
-    try {
-      await apiCall<CaseResponseType>(() =>
-        bindApi.cases({ case_id: caseId }).transition.post({ event } as { event: never })
-      );
-      await fetchCase();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Transition failed');
-    }
-  }
-
-  async function handleAddDocument(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmittingDoc(true);
-    setActionError(null);
-    try {
-      await apiCall<DocumentResponseType>(() =>
+  const addDocumentMutation = useMutation({
+    mutationFn: () =>
+      apiCall<DocumentResponseType>(() =>
         bindApi.cases({ case_id: caseId }).documents.post({
-          file_name: fileName,
+          file_name: documentForm.fileName,
           mime_type: 'application/pdf',
-          document_type: documentType as never,
+          document_type: documentForm.documentType,
         })
-      );
-      setFileName('');
-      setDocumentType('other');
-      setShowDocForm(false);
-      await fetchDocuments();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Failed to add document');
-    } finally {
-      setSubmittingDoc(false);
-    }
-  }
+      ),
+    onSuccess: async () => {
+      dispatchDocumentForm({ type: 'reset' });
+      await queryClient.invalidateQueries({ queryKey: documentsQueryKey(caseId) });
+    },
+  });
 
-  async function handleDeleteDocument(documentId: string) {
-    setActionError(null);
-    try {
-      await apiCall<void>(() =>
+  const deleteDocumentMutation = useMutation({
+    mutationFn: (documentId: string) =>
+      apiCall<void>(() =>
         bindApi.cases({ case_id: caseId }).documents({ document_id: documentId }).delete()
-      );
-      await fetchDocuments();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Failed to delete document');
-    }
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: documentsQueryKey(caseId) });
+    },
+  });
+
+  function handleAddDocument(event: FormEvent) {
+    event.preventDefault();
+    addDocumentMutation.mutate();
   }
 
-  if (loading) return <main style={{ padding: '1rem' }}>Loading...</main>;
-  if (error) return <main style={{ padding: '1rem', color: 'red' }}>{error}</main>;
+  const loadError = caseQuery.error ?? documentsQuery.error;
+  const loading = caseQuery.isLoading || documentsQuery.isLoading;
+  const caseData = caseQuery.data;
+  const documents = documentsQuery.data ?? [];
+
+  if (loading) return <main className="p-4">Loading...</main>;
+  if (loadError) {
+    return (
+      <main className="text-destructive p-4">
+        {getErrorMessage(loadError, 'Failed to load case')}
+      </main>
+    );
+  }
   if (!caseData) return null;
 
-  const status = caseData.status as 'draft' | 'in_review' | 'completed' | 'cancelled';
-
   return (
-    <main data-testid="case-detail" style={{ padding: '1rem', maxWidth: '800px' }}>
-      <Link to="/cases/" style={{ color: '#0070f3', fontSize: '0.9rem' }}>
-        &larr; Back to cases
-      </Link>
+    <main data-testid="case-detail" className="max-w-4xl p-4">
+      <Button variant="link" asChild className="h-auto p-0 text-sm">
+        <Link to="/cases">&larr; Back to cases</Link>
+      </Button>
 
-      <h1 style={{ marginTop: '0.75rem' }}>{caseData.case_name}</h1>
-      <p>Client: {caseData.client_name}</p>
+      <h1 className="mt-3 text-2xl font-semibold">{caseData.case_name}</h1>
+      <p className="mt-2">Client: {caseData.client_name}</p>
       <p>
         Status: <strong data-testid="case-status">{caseData.status}</strong>
       </p>
 
-      <div style={{ display: 'flex', gap: '0.5rem', margin: '1rem 0' }}>
-        {status === 'draft' && (
+      <div className="my-4 flex gap-2">
+        {caseData.status === 'draft' && (
           <>
-            <Button data-testid="submit-button" onClick={() => handleTransition('submit')}>
+            <Button
+              data-testid="submit-button"
+              disabled={transitionMutation.isPending}
+              onClick={() => transitionMutation.mutate('submit')}
+            >
               Submit for Review
             </Button>
             <Button
               data-testid="cancel-button"
               variant="destructive"
-              onClick={() => handleTransition('cancel')}
+              disabled={transitionMutation.isPending}
+              onClick={() => transitionMutation.mutate('cancel')}
             >
               Cancel
             </Button>
           </>
         )}
-        {status === 'in_review' && (
+        {caseData.status === 'in_review' && (
           <>
-            <Button data-testid="complete-button" onClick={() => handleTransition('complete')}>
+            <Button
+              data-testid="complete-button"
+              disabled={transitionMutation.isPending}
+              onClick={() => transitionMutation.mutate('complete')}
+            >
               Complete
             </Button>
             <Button
               data-testid="cancel-button"
               variant="destructive"
-              onClick={() => handleTransition('cancel')}
+              disabled={transitionMutation.isPending}
+              onClick={() => transitionMutation.mutate('cancel')}
             >
               Cancel
             </Button>
@@ -158,82 +204,114 @@ function CaseDetail() {
         )}
       </div>
 
-      {actionError && <p style={{ color: 'red' }}>{actionError}</p>}
+      {transitionMutation.error && (
+        <p className="text-destructive mb-4">
+          {getErrorMessage(transitionMutation.error, 'Transition failed')}
+        </p>
+      )}
 
-      <hr style={{ margin: '1.5rem 0' }} />
+      <div className="border-border my-6 border-t" />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
-        <h2 style={{ margin: 0 }}>Documents</h2>
+      <div className="mb-3 flex items-center gap-4">
+        <h2 className="text-xl font-semibold">Documents</h2>
         <Button
           data-testid="add-document-button"
           variant="outline"
-          onClick={() => setShowDocForm((v) => !v)}
+          onClick={() => dispatchDocumentForm({ type: 'toggle' })}
         >
-          {showDocForm ? 'Cancel' : 'Add Document'}
+          {documentForm.visible ? 'Cancel' : 'Add Document'}
         </Button>
       </div>
 
-      {showDocForm && (
-        <form
-          onSubmit={handleAddDocument}
-          style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
-        >
-          <input
+      {documentForm.visible && (
+        <form onSubmit={handleAddDocument} className="mb-4 flex flex-wrap gap-2">
+          <Input
             data-testid="file-name-input"
             placeholder="File name"
-            value={fileName}
-            onChange={(e) => setFileName(e.target.value)}
+            value={documentForm.fileName}
+            onChange={(event) =>
+              dispatchDocumentForm({ type: 'fileName.changed', value: event.target.value })
+            }
             required
-            style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
           />
-          <select
-            data-testid="document-type-select"
-            value={documentType}
-            onChange={(e) => setDocumentType(e.target.value as DocumentType)}
-            style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
+          <Select
+            value={documentForm.documentType}
+            onValueChange={(value) => {
+              if (isDocumentType(value)) {
+                dispatchDocumentForm({ type: 'documentType.changed', value });
+              }
+            }}
           >
-            {DOCUMENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" data-testid="create-document-button" disabled={submittingDoc}>
-            {submittingDoc ? 'Adding...' : 'Add'}
+            <SelectTrigger data-testid="document-type-select" className="w-56">
+              <SelectValue placeholder="Document type" />
+            </SelectTrigger>
+            <SelectContent>
+              {DOCUMENT_TYPES.map((documentType) => (
+                <SelectItem key={documentType} value={documentType}>
+                  {documentType}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="submit"
+            data-testid="create-document-button"
+            disabled={addDocumentMutation.isPending}
+          >
+            {addDocumentMutation.isPending ? 'Adding...' : 'Add'}
           </Button>
         </form>
       )}
 
-      <ul data-testid="documents-list" style={{ listStyle: 'none', padding: 0 }}>
-        {documents.map((doc) => (
-          <li
-            key={doc.id}
-            data-testid={`document-row-${doc.id}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-              padding: '0.4rem 0',
-              borderBottom: '1px solid #eee',
-            }}
-          >
-            <span style={{ flex: 1 }}>{doc.file_name}</span>
-            <span style={{ color: '#666' }}>{doc.document_type}</span>
-            <span style={{ color: '#999', fontSize: '0.85rem' }}>{doc.analysis_status}</span>
-            <Button
-              data-testid={`delete-document-${doc.id}`}
-              variant="destructive"
-              size="sm"
-              onClick={() => handleDeleteDocument(doc.id)}
-            >
-              Delete
-            </Button>
-          </li>
-        ))}
-        {documents.length === 0 && (
-          <li style={{ color: '#999', padding: '0.4rem 0' }}>No documents yet.</li>
-        )}
-      </ul>
+      {addDocumentMutation.error && (
+        <p className="text-destructive mb-4">
+          {getErrorMessage(addDocumentMutation.error, 'Failed to add document')}
+        </p>
+      )}
+
+      <Table data-testid="documents-list">
+        <TableHeader>
+          <TableRow>
+            <TableHead>File Name</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>Analysis</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {documents.map((document) => (
+            <TableRow key={document.id} data-testid={`document-row-${document.id}`}>
+              <TableCell>{document.file_name}</TableCell>
+              <TableCell>{document.document_type}</TableCell>
+              <TableCell>{document.analysis_status}</TableCell>
+              <TableCell className="text-right">
+                <Button
+                  data-testid={`delete-document-${document.id}`}
+                  variant="destructive"
+                  size="sm"
+                  disabled={deleteDocumentMutation.isPending}
+                  onClick={() => deleteDocumentMutation.mutate(document.id)}
+                >
+                  Delete
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {documents.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={4} className="text-muted-foreground">
+                No documents yet.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+
+      {deleteDocumentMutation.error && (
+        <p className="text-destructive mt-4">
+          {getErrorMessage(deleteDocumentMutation.error, 'Failed to delete document')}
+        </p>
+      )}
     </main>
   );
 }

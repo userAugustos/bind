@@ -3,7 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@api/db/client';
 import { reviewCases } from '@api/db/schema';
 
-import type { CaseResponseType } from './review-cases.schemas';
+import type { CaseResponseType, CaseStatus } from './review-cases.schemas';
 
 type InsertCase = {
   case_name: string;
@@ -13,7 +13,7 @@ type InsertCase = {
 type UpdateCase = {
   case_name?: string;
   client_name?: string;
-  status?: string;
+  status?: CaseStatus;
   updated_at: string;
 };
 
@@ -21,7 +21,7 @@ const toResponse = (row: typeof reviewCases.$inferSelect): CaseResponseType => (
   id: row.id,
   case_name: row.caseName,
   client_name: row.clientName,
-  status: row.status,
+  status: row.status as CaseStatus,
   created_at: row.createdAt,
   updated_at: row.updatedAt,
 });

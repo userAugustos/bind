@@ -1,11 +1,19 @@
 import { t } from 'elysia';
-import type { Static } from 'elysia';
 
 export const CaseStatusValues = ['draft', 'in_review', 'completed', 'cancelled'] as const;
 export type CaseStatus = (typeof CaseStatusValues)[number];
 
 export const CaseEventValues = ['submit', 'complete', 'cancel'] as const;
 export type CaseEvent = (typeof CaseEventValues)[number];
+
+export type CaseResponseType = {
+  id: string;
+  case_name: string;
+  client_name: string;
+  status: CaseStatus;
+  created_at: string;
+  updated_at: string;
+};
 
 export const CreateCaseBody = t.Object({
   case_name: t.String({ minLength: 1 }),
@@ -31,9 +39,12 @@ export const CaseResponse = t.Object({
   id: t.String(),
   case_name: t.String(),
   client_name: t.String(),
-  status: t.String(),
+  status: t.Union([
+    t.Literal('draft'),
+    t.Literal('in_review'),
+    t.Literal('completed'),
+    t.Literal('cancelled'),
+  ]),
   created_at: t.String(),
   updated_at: t.String(),
 });
-
-export type CaseResponseType = Static<typeof CaseResponse>;

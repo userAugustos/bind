@@ -2,12 +2,12 @@ import { notFound } from '@core/errors';
 
 import { reviewCasesRepository } from '../review-cases/review-cases.repository';
 import { documentsRepository } from './documents.repository';
-import type { DocumentResponseType } from './documents.schemas';
+import type { DocumentResponseType, DocumentType } from './documents.schemas';
 
 export const documentsService = {
   async createDocument(
     caseId: string,
-    data: { file_name: string; mime_type: string; document_type: string }
+    data: { file_name: string; mime_type: string; document_type: DocumentType }
   ): Promise<DocumentResponseType> {
     const existing = await reviewCasesRepository.findById(caseId);
     if (!existing) throw notFound('case_not_found', `Case '${caseId}' not found`);

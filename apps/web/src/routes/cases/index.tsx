@@ -1,147 +1,166 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useReducer } from 'react';
+import type { FormEvent } from 'react';
 
 import type { CaseResponseType } from '@bind/api/review-cases';
 
 import { Button } from '@repo/ui/shadcn/button';
+import { Input } from '@repo/ui/shadcn/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@repo/ui/shadcn/table';
 import { apiCall, bindApi } from '@/api';
 
 export const Route = createFileRoute('/cases/')({ component: CasesList });
 
+const casesQueryKey = ['cases'] as const;
+
+type CaseFormState = {
+  visible: boolean;
+  caseName: string;
+  clientName: string;
+};
+
+type CaseFormEvent =
+  | { type: 'toggle' }
+  | { type: 'caseName.changed'; value: string }
+  | { type: 'clientName.changed'; value: string }
+  | { type: 'reset' };
+
+const initialCaseForm: CaseFormState = { visible: false, caseName: '', clientName: '' };
+
+function caseFormReducer(state: CaseFormState, event: CaseFormEvent): CaseFormState {
+  switch (event.type) {
+    case 'toggle':
+      return { ...state, visible: !state.visible };
+    case 'caseName.changed':
+      return { ...state, caseName: event.value };
+    case 'clientName.changed':
+      return { ...state, clientName: event.value };
+    case 'reset':
+      return initialCaseForm;
+  }
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function CasesList() {
-  const [cases, setCases] = useState<CaseResponseType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [caseName, setCaseName] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const queryClient = useQueryClient();
+  const [form, dispatchForm] = useReducer(caseFormReducer, initialCaseForm);
 
-  async function fetchCases() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiCall<CaseResponseType[]>(() => bindApi.cases.get());
-      setCases(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load cases');
-    } finally {
-      setLoading(false);
-    }
+  const casesQuery = useQuery({
+    queryKey: casesQueryKey,
+    queryFn: () => apiCall<CaseResponseType[]>(() => bindApi.cases.get()),
+  });
+
+  const createCaseMutation = useMutation({
+    mutationFn: () =>
+      apiCall<CaseResponseType>(() =>
+        bindApi.cases.post({ case_name: form.caseName, client_name: form.clientName })
+      ),
+    onSuccess: async () => {
+      dispatchForm({ type: 'reset' });
+      await queryClient.invalidateQueries({ queryKey: casesQueryKey });
+    },
+  });
+
+  function handleCreate(event: FormEvent) {
+    event.preventDefault();
+    createCaseMutation.mutate();
   }
 
-  useEffect(() => {
-    void fetchCases();
-  }, []);
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      await apiCall<CaseResponseType>(() =>
-        bindApi.cases.post({ case_name: caseName, client_name: clientName })
-      );
-      setCaseName('');
-      setClientName('');
-      setShowForm(false);
-      await fetchCases();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create case');
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const cases = casesQuery.data ?? [];
+  const error = casesQuery.error ?? createCaseMutation.error;
 
   return (
-    <main style={{ padding: '1rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-        <h1>Review Cases</h1>
-        <Button data-testid="new-case-button" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? 'Cancel' : 'New Case'}
+    <main className="p-4">
+      <div className="mb-4 flex items-center gap-4">
+        <h1 className="text-2xl font-semibold">Review Cases</h1>
+        <Button data-testid="new-case-button" onClick={() => dispatchForm({ type: 'toggle' })}>
+          {form.visible ? 'Cancel' : 'New Case'}
         </Button>
       </div>
 
-      {showForm && (
-        <form
-          onSubmit={handleCreate}
-          style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
-        >
-          <input
+      {form.visible && (
+        <form onSubmit={handleCreate} className="mb-4 flex flex-wrap gap-2">
+          <Input
             data-testid="case-name-input"
             placeholder="Case name"
-            value={caseName}
-            onChange={(e) => setCaseName(e.target.value)}
+            value={form.caseName}
+            onChange={(event) =>
+              dispatchForm({ type: 'caseName.changed', value: event.target.value })
+            }
             required
-            style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
           />
-          <input
+          <Input
             data-testid="client-name-input"
             placeholder="Client name"
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
+            value={form.clientName}
+            onChange={(event) =>
+              dispatchForm({ type: 'clientName.changed', value: event.target.value })
+            }
             required
-            style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
           />
-          <Button type="submit" data-testid="create-case-button" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create'}
+          <Button
+            type="submit"
+            data-testid="create-case-button"
+            disabled={createCaseMutation.isPending}
+          >
+            {createCaseMutation.isPending ? 'Creating...' : 'Create'}
           </Button>
         </form>
       )}
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {loading && <p>Loading...</p>}
+      {error && (
+        <p className="text-destructive mb-4">{getErrorMessage(error, 'Failed to load cases')}</p>
+      )}
+      {casesQuery.isLoading && <p>Loading...</p>}
 
-      {!loading && (
-        <table
-          data-testid="cases-list"
-          style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.9rem' }}
-        >
-          <thead>
-            <tr>
-              <th style={thStyle}>Case Name</th>
-              <th style={thStyle}>Client Name</th>
-              <th style={thStyle}>Status</th>
-              <th style={thStyle}>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cases.map((c) => (
-              <tr
-                key={c.id}
-                data-testid={`case-row-${c.id}`}
-                style={{ cursor: 'pointer', borderBottom: '1px solid #eee' }}
-              >
-                <td style={tdStyle}>
-                  <Link to="/cases/$caseId" params={{ caseId: c.id }} style={{ color: '#0070f3' }}>
-                    {c.case_name}
+      {!casesQuery.isLoading && (
+        <Table data-testid="cases-list">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Case Name</TableHead>
+              <TableHead>Client Name</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {cases.map((reviewCase) => (
+              <TableRow key={reviewCase.id} data-testid={`case-row-${reviewCase.id}`}>
+                <TableCell>
+                  <Link
+                    to="/cases/$caseId"
+                    params={{ caseId: reviewCase.id }}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    {reviewCase.case_name}
                   </Link>
-                </td>
-                <td style={tdStyle}>{c.client_name}</td>
-                <td style={tdStyle}>{c.status}</td>
-                <td style={tdStyle}>{new Date(c.created_at).toLocaleDateString()}</td>
-              </tr>
+                </TableCell>
+                <TableCell>{reviewCase.client_name}</TableCell>
+                <TableCell>{reviewCase.status}</TableCell>
+                <TableCell>{new Date(reviewCase.created_at).toLocaleDateString()}</TableCell>
+              </TableRow>
             ))}
             {cases.length === 0 && (
-              <tr>
-                <td colSpan={4} style={{ ...tdStyle, color: '#999' }}>
+              <TableRow>
+                <TableCell colSpan={4} className="text-muted-foreground">
                   No cases yet.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
     </main>
   );
 }
-
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '0.4rem 0.8rem',
-  borderBottom: '2px solid #ccc',
-  fontWeight: 600,
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '0.4rem 0.8rem',
-};
