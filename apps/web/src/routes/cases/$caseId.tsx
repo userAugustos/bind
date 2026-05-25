@@ -22,6 +22,37 @@ const DOCUMENT_TYPES: DocumentType[] = [
   'other',
 ];
 
+interface PolicyCheckResult {
+  check_id: string;
+  check_name: string;
+  verdict: 'ok' | 'gap' | 'missing' | 'review' | 'not_applicable';
+  severity: 'blocking' | 'material' | 'minor' | 'informational';
+  message: string;
+  evidence: {
+    requirement_source: string;
+    found_value: string | null;
+    document_id: string;
+    page_numbers: number[];
+  };
+}
+
+interface PolicyCheckResponse {
+  id: string;
+  case_id: string;
+  requirements_document_id: string;
+  target_document_id: string;
+  target_document_type: string;
+  results: PolicyCheckResult[];
+  summary_counts: {
+    ok: number;
+    gap: number;
+    missing: number;
+    review: number;
+    not_applicable: number;
+  };
+  created_at: string;
+}
+
 function CaseDetail() {
   const { caseId } = Route.useParams();
   const queryClient = useQueryClient();
@@ -33,6 +64,17 @@ function CaseDetail() {
 
   const [policyCheckReqDocId, setPolicyCheckReqDocId] = useState('');
   const [policyCheckTargetDocId, setPolicyCheckTargetDocId] = useState('');
+  const [policyCheckRunning, setPolicyCheckRunning] = useState(false);
+  const [policyCheckResult, setPolicyCheckResult] = useState<PolicyCheckResponse | null>(null);
+
+  async function fetchCase() {
+    try {
+      const data = await apiCall<CaseResponseType>(() => bindApi.cases({ case_id: caseId }).get());
+      setCaseData(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load case');
+    }
+  }
 
   const caseQuery = useQuery({
     queryKey: ['cases', caseId],
@@ -150,10 +192,49 @@ function CaseDetail() {
     policyCheckMutation.error ??
     quoteComparisonMutation.error;
 
-  if (caseQuery.isLoading) return <main className="p-4">Loading...</main>;
-  if (caseQuery.error)
-    return <main className="text-destructive p-4">{caseQuery.error.message}</main>;
-  if (!caseQuery.data) return null;
+  async function handleRunPolicyCheck() {
+    if (!policyCheckReqDocId || !policyCheckTargetDocId) return;
+    setPolicyCheckRunning(true);
+    setActionError(null);
+    try {
+      const result = await apiCall<PolicyCheckResponse>(() =>
+        bindApi.cases({ case_id: caseId })['policy-check'].post({
+          requirements_document_id: policyCheckReqDocId,
+          target_document_id: policyCheckTargetDocId,
+        })
+      );
+      setPolicyCheckResult(result);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Policy check failed');
+    } finally {
+      setPolicyCheckRunning(false);
+    }
+  }
+
+  async function handleFetchLatestPolicyCheck() {
+    setActionError(null);
+    try {
+      const result = await apiCall<PolicyCheckResponse>(() =>
+        bindApi.cases({ case_id: caseId })['policy-check'].get()
+      );
+      setPolicyCheckResult(result);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to fetch policy check');
+    }
+  }
+
+  const requirementsDocs = documents.filter(
+    (d) => d.document_type === 'contract_requirements' && d.analysis_status === 'completed'
+  );
+  const targetDocs = documents.filter(
+    (d) =>
+      (d.document_type === 'current_policy' || d.document_type === 'carrier_quote') &&
+      d.analysis_status === 'completed'
+  );
+
+  if (loading) return <main style={{ padding: '1rem' }}>Loading...</main>;
+  if (error) return <main style={{ padding: '1rem', color: 'red' }}>{error}</main>;
+  if (!caseData) return null;
 
   const caseData = caseQuery.data;
   const documents = documentsQuery.data ?? [];
@@ -337,31 +418,41 @@ function CaseDetail() {
         )}
       </ul>
 
-      <hr className="border-border my-6" />
+      <hr style={{ margin: '1.5rem 0' }} />
 
-      {/* Policy Check section */}
       <div data-testid="policy-check-section">
-        <div className="mb-3 flex items-center gap-4">
-          <h2 className="text-xl font-semibold">Policy Check</h2>
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}
+        >
+          <h2 style={{ margin: 0 }}>Policy Check</h2>
           <Button
             data-testid="fetch-latest-policy-check"
             variant="outline"
             size="sm"
-            disabled={policyCheckQuery.isFetching}
-            onClick={() => policyCheckQuery.refetch()}
+            onClick={handleFetchLatestPolicyCheck}
           >
             Load Latest
           </Button>
         </div>
 
-        <div className="mb-4 flex flex-wrap items-end gap-2">
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.5rem',
+            flexWrap: 'wrap',
+            alignItems: 'flex-end',
+            marginBottom: '1rem',
+          }}
+        >
           <div>
-            <label className="mb-1 block text-xs">Requirements Document</label>
+            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.25rem' }}>
+              Requirements Document
+            </label>
             <select
               data-testid="policy-check-req-select"
               value={policyCheckReqDocId}
               onChange={(e) => setPolicyCheckReqDocId(e.target.value)}
-              className="border-input rounded-md border px-3 py-1.5 text-sm"
+              style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
             >
               <option value="">-- select --</option>
               {requirementsDocs.map((d) => (
@@ -372,12 +463,14 @@ function CaseDetail() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs">Target Document</label>
+            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.25rem' }}>
+              Target Document
+            </label>
             <select
               data-testid="policy-check-target-select"
               value={policyCheckTargetDocId}
               onChange={(e) => setPolicyCheckTargetDocId(e.target.value)}
-              className="border-input rounded-md border px-3 py-1.5 text-sm"
+              style={{ padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
             >
               <option value="">-- select --</option>
               {targetDocs.map((d) => (
@@ -389,12 +482,10 @@ function CaseDetail() {
           </div>
           <Button
             data-testid="run-policy-check"
-            disabled={
-              !policyCheckReqDocId || !policyCheckTargetDocId || policyCheckMutation.isPending
-            }
+            disabled={!policyCheckReqDocId || !policyCheckTargetDocId || policyCheckRunning}
             onClick={handleRunPolicyCheck}
           >
-            {policyCheckMutation.isPending ? 'Running...' : 'Run Check'}
+            {policyCheckRunning ? 'Running...' : 'Run Check'}
           </Button>
         </div>
 
@@ -402,100 +493,49 @@ function CaseDetail() {
           <div data-testid="policy-check-results">
             <div
               data-testid="policy-check-summary"
-              className="bg-muted mb-3 flex gap-3 rounded-md px-3 py-2 text-sm"
+              style={{
+                display: 'flex',
+                gap: '0.75rem',
+                padding: '0.5rem 0.75rem',
+                background: '#f5f5f5',
+                borderRadius: '4px',
+                fontSize: '0.85rem',
+                marginBottom: '0.75rem',
+              }}
             >
-              <span className="text-green-800">{policyCheckResult.summary_counts.ok} OK</span>
-              <span className="text-orange-800">{policyCheckResult.summary_counts.gap} Gap</span>
-              <span className="text-red-800">
+              <span style={{ color: '#065f46' }}>{policyCheckResult.summary_counts.ok} OK</span>
+              <span style={{ color: '#9a3412' }}>{policyCheckResult.summary_counts.gap} Gap</span>
+              <span style={{ color: '#991b1b' }}>
                 {policyCheckResult.summary_counts.missing} Missing
               </span>
-              <span className="text-yellow-800">
+              <span style={{ color: '#854d0e' }}>
                 {policyCheckResult.summary_counts.review} Review
               </span>
-              <span className="text-muted-foreground">
+              <span style={{ color: '#6b7280' }}>
                 {policyCheckResult.summary_counts.not_applicable} N/A
               </span>
             </div>
 
-            <ul className="space-y-0">
-              {policyCheckResult.results.map((r: CheckResultItem) => (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {policyCheckResult.results.map((r) => (
                 <li
                   key={r.check_id}
                   data-testid={`policy-check-item-${r.check_id}`}
-                  className="border-border border-b py-2"
+                  style={{ padding: '0.5rem 0', borderBottom: '1px solid #eee' }}
                 >
-                  <div className="flex items-center gap-2">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <VerdictBadge verdict={r.verdict} />
-                    <span className="font-medium">{r.check_name}</span>
-                    <span className="text-muted-foreground ml-auto text-xs">{r.severity}</span>
+                    <span style={{ fontWeight: 500 }}>{r.check_name}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: 'auto' }}>
+                      {r.severity}
+                    </span>
                   </div>
-                  <p className="text-foreground/70 mt-1 text-sm">{r.message}</p>
+                  <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#444' }}>
+                    {r.message}
+                  </p>
                 </li>
               ))}
             </ul>
-          </div>
-        )}
-      </div>
-
-      <hr className="border-border my-6" />
-
-      {/* Quote Comparison section */}
-      <div data-testid="quote-comparison-section">
-        <div className="mb-3 flex items-center gap-4">
-          <h2 className="text-xl font-semibold">Quote Comparison</h2>
-          <Button
-            data-testid="run-quote-comparison"
-            disabled={!canRunComparison || quoteComparisonMutation.isPending}
-            onClick={handleRunQuoteComparison}
-          >
-            {quoteComparisonMutation.isPending ? 'Running...' : 'Run Comparison'}
-          </Button>
-        </div>
-
-        {!canRunComparison && (
-          <p className="text-muted-foreground text-sm">
-            {requirementsDocs.length === 0
-              ? 'Needs a completed contract_requirements analysis.'
-              : `Needs at least 2 completed target docs (current_policy / carrier_quote). Found ${targetDocs.length}.`}
-          </p>
-        )}
-
-        {quoteComparisonResult && (
-          <div data-testid="quote-comparison-results">
-            {quoteComparisonResult.result.recommendation.recommended_document_id && (
-              <div
-                data-testid="quote-comparison-recommendation"
-                className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4"
-              >
-                <strong>
-                  Recommended:{' '}
-                  {quoteComparisonResult.result.options.find(
-                    (o) =>
-                      o.target_document_id ===
-                      quoteComparisonResult.result.recommendation.recommended_document_id
-                  )?.option_name ?? 'Unknown'}
-                </strong>
-                <p className="mt-1 text-sm text-blue-800">
-                  {quoteComparisonResult.result.recommendation.reason}
-                </p>
-                <p className="text-foreground/70 mt-1 text-sm">
-                  {quoteComparisonResult.result.recommendation.explanation}
-                </p>
-              </div>
-            )}
-
-            <div data-testid="quote-comparison-options" className="flex gap-4 overflow-x-auto">
-              {quoteComparisonResult.result.options.map((option) => (
-                <QuoteOptionCard
-                  key={option.target_document_id}
-                  option={option}
-                  isRecommended={
-                    option.target_document_id ===
-                    quoteComparisonResult.result.recommendation.recommended_document_id
-                  }
-                />
-              ))}
-            </div>
           </div>
         )}
       </div>
@@ -603,5 +643,33 @@ function QuoteOptionCard({
         </div>
       )}
     </div>
+  );
+}
+
+const VERDICT_COLORS: Record<PolicyCheckResult['verdict'], { background: string; color: string }> =
+  {
+    ok: { background: '#d1fae5', color: '#065f46' },
+    gap: { background: '#ffedd5', color: '#9a3412' },
+    missing: { background: '#fee2e2', color: '#991b1b' },
+    review: { background: '#fef3c7', color: '#854d0e' },
+    not_applicable: { background: '#e5e7eb', color: '#6b7280' },
+  };
+
+function VerdictBadge({ verdict }: { verdict: PolicyCheckResult['verdict'] }) {
+  const colors = VERDICT_COLORS[verdict];
+  return (
+    <span
+      data-testid={`verdict-badge-${verdict}`}
+      style={{
+        fontSize: '0.7rem',
+        padding: '0.15rem 0.5rem',
+        borderRadius: '9999px',
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        ...colors,
+      }}
+    >
+      {verdict.replace('_', ' ')}
+    </span>
   );
 }
