@@ -15,6 +15,14 @@
     "./core": {
       "types": "./dist/core.d.ts",
       "import": "./dist/core.js"
+    },
+    "./review-cases": {
+      "types": "./dist/review-cases.d.ts",
+      "import": "./dist/review-cases.js"
+    },
+    "./documents": {
+      "types": "./dist/documents.d.ts",
+      "import": "./dist/documents.js"
     }
   },
   "scripts": {

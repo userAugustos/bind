@@ -8,6 +8,20 @@
       "when": 1779651139192,
       "tag": "0000_narrow_plazm",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779674104528,
+      "tag": "0001_lethal_wrecker",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779674673659,
+      "tag": "0002_ordinary_jean_grey",
+      "breakpoints": true
     }
   ]
 }
