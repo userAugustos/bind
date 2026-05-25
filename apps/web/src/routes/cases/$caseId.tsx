@@ -52,6 +52,42 @@ interface PolicyCheckResponse {
   created_at: string;
 }
 
+interface QuoteComparisonOption {
+  target_document_id: string;
+  option_name: string;
+  carrier_name: string;
+  premium: number | null;
+  deductible_summary: string;
+  meets_core_requirements: boolean;
+  policy_check_summary: {
+    ok: number;
+    gap: number;
+    missing: number;
+    review: number;
+    not_applicable: number;
+  };
+  strengths: string[];
+  risks: string[];
+  missing_requirements: string[];
+  review_items: string[];
+}
+
+interface QuoteComparisonResponse {
+  id: string;
+  case_id: string;
+  requirements_document_id: string;
+  target_document_ids: string[];
+  result: {
+    options: QuoteComparisonOption[];
+    recommendation: {
+      recommended_document_id: string | null;
+      reason: string;
+      explanation: string;
+    };
+  };
+  created_at: string;
+}
+
 function CaseDetail() {
   const { caseId } = Route.useParams();
   const queryClient = useQueryClient();
@@ -65,6 +101,10 @@ function CaseDetail() {
   const [policyCheckTargetDocId, setPolicyCheckTargetDocId] = useState('');
   const [policyCheckRunning, setPolicyCheckRunning] = useState(false);
   const [policyCheckResult, setPolicyCheckResult] = useState<PolicyCheckResponse | null>(null);
+
+  const [quoteComparisonRunning, setQuoteComparisonRunning] = useState(false);
+  const [quoteComparisonResult, setQuoteComparisonResult] =
+    useState<QuoteComparisonResponse | null>(null);
 
   async function fetchCase() {
     try {
@@ -219,6 +259,28 @@ function CaseDetail() {
       (d.document_type === 'current_policy' || d.document_type === 'carrier_quote') &&
       d.analysis_status === 'completed'
   );
+
+  const canRunComparison = requirementsDocs.length > 0 && targetDocs.length >= 2;
+
+  async function handleRunQuoteComparison() {
+    const reqDoc = requirementsDocs[0];
+    if (!reqDoc || targetDocs.length < 2) return;
+    setQuoteComparisonRunning(true);
+    setActionError(null);
+    try {
+      const result = await apiCall<QuoteComparisonResponse>(() =>
+        bindApi.cases({ case_id: caseId })['quote-comparison'].post({
+          requirements_document_id: reqDoc.id,
+          target_document_ids: targetDocs.map((d) => d.id),
+        })
+      );
+      setQuoteComparisonResult(result);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Quote comparison failed');
+    } finally {
+      setQuoteComparisonRunning(false);
+    }
+  }
 
   if (loading) return <main style={{ padding: '1rem' }}>Loading...</main>;
   if (error) return <main style={{ padding: '1rem', color: 'red' }}>{error}</main>;
@@ -515,6 +577,79 @@ function CaseDetail() {
           </div>
         )}
       </div>
+
+      <hr style={{ margin: '1.5rem 0' }} />
+
+      <div data-testid="quote-comparison-section">
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}
+        >
+          <h2 style={{ margin: 0 }}>Quote Comparison</h2>
+          <Button
+            data-testid="run-quote-comparison"
+            disabled={!canRunComparison || quoteComparisonRunning}
+            onClick={handleRunQuoteComparison}
+          >
+            {quoteComparisonRunning ? 'Running...' : 'Run Comparison'}
+          </Button>
+        </div>
+
+        {!canRunComparison && (
+          <p style={{ fontSize: '0.85rem', color: '#666' }}>
+            {requirementsDocs.length === 0
+              ? 'Needs a completed contract_requirements analysis.'
+              : `Needs at least 2 completed target docs (current_policy / carrier_quote). Found ${targetDocs.length}.`}
+          </p>
+        )}
+
+        {quoteComparisonResult && (
+          <div data-testid="quote-comparison-results">
+            {quoteComparisonResult.result.recommendation.recommended_document_id && (
+              <div
+                data-testid="quote-comparison-recommendation"
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '6px',
+                  marginBottom: '1rem',
+                }}
+              >
+                <strong>
+                  Recommended:{' '}
+                  {quoteComparisonResult.result.options.find(
+                    (o) =>
+                      o.target_document_id ===
+                      quoteComparisonResult.result.recommendation.recommended_document_id
+                  )?.option_name ?? 'Unknown'}
+                </strong>
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#1e40af' }}>
+                  {quoteComparisonResult.result.recommendation.reason}
+                </p>
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#444' }}>
+                  {quoteComparisonResult.result.recommendation.explanation}
+                </p>
+              </div>
+            )}
+
+            <div
+              data-testid="quote-comparison-options"
+              style={{ display: 'flex', gap: '1rem', overflowX: 'auto' }}
+            >
+              {quoteComparisonResult.result.options.map((option) => (
+                <QuoteOptionCard
+                  key={option.target_document_id}
+                  option={option}
+                  isRecommended={
+                    option.target_document_id ===
+                    quoteComparisonResult.result.recommendation.recommended_document_id
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
@@ -575,5 +710,95 @@ function VerdictBadge({ verdict }: { verdict: PolicyCheckResult['verdict'] }) {
     >
       {verdict.replace('_', ' ')}
     </span>
+  );
+}
+
+function QuoteOptionCard({
+  option,
+  isRecommended,
+}: {
+  option: QuoteComparisonOption;
+  isRecommended: boolean;
+}) {
+  return (
+    <div
+      data-testid={`quote-option-${option.target_document_id}`}
+      style={{
+        minWidth: '300px',
+        flex: '1 1 0',
+        border: isRecommended ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+        borderRadius: '8px',
+        padding: '1rem',
+        background: isRecommended ? '#f8faff' : '#fff',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: '1rem' }}>{option.option_name}</h3>
+        <span
+          data-testid={`meets-requirements-${option.target_document_id}`}
+          style={{ fontSize: '1.1rem' }}
+        >
+          {option.meets_core_requirements ? '✅' : '❌'}
+        </span>
+      </div>
+      <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#666' }}>
+        {option.carrier_name}
+      </p>
+      <p style={{ margin: '0.25rem 0', fontSize: '0.9rem', fontWeight: 600 }}>
+        Premium: {option.premium != null ? `$${option.premium.toLocaleString()}` : 'N/A'}
+      </p>
+      <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#444' }}>
+        {option.deductible_summary}
+      </p>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.5rem',
+          fontSize: '0.75rem',
+          margin: '0.5rem 0',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span style={{ color: '#065f46' }}>{option.policy_check_summary.ok} OK</span>
+        <span style={{ color: '#9a3412' }}>{option.policy_check_summary.gap} Gap</span>
+        <span style={{ color: '#991b1b' }}>{option.policy_check_summary.missing} Missing</span>
+        <span style={{ color: '#854d0e' }}>{option.policy_check_summary.review} Review</span>
+        <span style={{ color: '#6b7280' }}>{option.policy_check_summary.not_applicable} N/A</span>
+      </div>
+
+      {option.strengths.length > 0 && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <strong style={{ fontSize: '0.8rem' }}>Strengths</strong>
+          <ul style={{ margin: '0.25rem 0', paddingLeft: '1.2rem', fontSize: '0.8rem' }}>
+            {option.strengths.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {option.risks.length > 0 && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <strong style={{ fontSize: '0.8rem', color: '#b45309' }}>Risks</strong>
+          <ul style={{ margin: '0.25rem 0', paddingLeft: '1.2rem', fontSize: '0.8rem' }}>
+            {option.risks.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {option.missing_requirements.length > 0 && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <strong style={{ fontSize: '0.8rem', color: '#dc2626' }}>Missing Requirements</strong>
+          <ul style={{ margin: '0.25rem 0', paddingLeft: '1.2rem', fontSize: '0.8rem' }}>
+            {option.missing_requirements.map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
