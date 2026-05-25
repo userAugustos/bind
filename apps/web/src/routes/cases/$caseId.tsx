@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
-import type { DocumentResponseType, DocumentType } from '@bind/api/documents';
+import type { AnalysisStatus, DocumentResponseType, DocumentType } from '@bind/api/documents';
 import type { CaseEvent, CaseResponseType } from '@bind/api/review-cases';
 
 import { Button } from '@repo/ui/shadcn/button';
@@ -30,6 +30,10 @@ function CaseDetail() {
   const [fileName, setFileName] = useState('');
   const [documentType, setDocumentType] = useState<DocumentType>('other');
   const [submittingDoc, setSubmittingDoc] = useState(false);
+
+  const [analyzingDocId, setAnalyzingDocId] = useState<string | null>(null);
+  const [expandedAnalysisId, setExpandedAnalysisId] = useState<string | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<Record<string, unknown>>({});
 
   async function fetchCase() {
     try {
@@ -106,6 +110,41 @@ function CaseDetail() {
       await fetchDocuments();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Failed to delete document');
+    }
+  }
+
+  async function handleAnalyze(documentId: string) {
+    setAnalyzingDocId(documentId);
+    setActionError(null);
+    try {
+      await apiCall<unknown>(() =>
+        bindApi
+          .cases({ case_id: caseId })
+          .documents({ document_id: documentId })
+          .analyze.post({} as never)
+      );
+      await fetchDocuments();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Analysis failed');
+    } finally {
+      setAnalyzingDocId(null);
+    }
+  }
+
+  async function handleViewAnalysis(documentId: string) {
+    if (expandedAnalysisId === documentId) {
+      setExpandedAnalysisId(null);
+      return;
+    }
+    setActionError(null);
+    try {
+      const result = await apiCall<{ result: unknown }>(() =>
+        bindApi.cases({ case_id: caseId }).documents({ document_id: documentId }).analysis.get()
+      );
+      setAnalysisResults((prev) => ({ ...prev, [documentId]: result }));
+      setExpandedAnalysisId(documentId);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to load analysis');
     }
   }
 
@@ -206,28 +245,64 @@ function CaseDetail() {
 
       <ul data-testid="documents-list" style={{ listStyle: 'none', padding: 0 }}>
         {documents.map((doc) => (
-          <li
-            key={doc.id}
-            data-testid={`document-row-${doc.id}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-              padding: '0.4rem 0',
-              borderBottom: '1px solid #eee',
-            }}
-          >
-            <span style={{ flex: 1 }}>{doc.file_name}</span>
-            <span style={{ color: '#666' }}>{doc.document_type}</span>
-            <span style={{ color: '#999', fontSize: '0.85rem' }}>{doc.analysis_status}</span>
-            <Button
-              data-testid={`delete-document-${doc.id}`}
-              variant="destructive"
-              size="sm"
-              onClick={() => handleDeleteDocument(doc.id)}
+          <li key={doc.id} data-testid={`document-row-${doc.id}`}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                padding: '0.4rem 0',
+                borderBottom: expandedAnalysisId === doc.id ? 'none' : '1px solid #eee',
+              }}
             >
-              Delete
-            </Button>
+              <span style={{ flex: 1 }}>{doc.file_name}</span>
+              <span style={{ color: '#666' }}>{doc.document_type}</span>
+              <AnalysisStatusBadge status={doc.analysis_status as AnalysisStatus} />
+              {doc.analysis_status === 'completed' && (
+                <Button
+                  data-testid={`view-analysis-${doc.id}`}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleViewAnalysis(doc.id)}
+                >
+                  {expandedAnalysisId === doc.id ? 'Hide Analysis' : 'View Analysis'}
+                </Button>
+              )}
+              <Button
+                data-testid={`analyze-document-${doc.id}`}
+                variant="secondary"
+                size="sm"
+                disabled={analyzingDocId === doc.id}
+                onClick={() => handleAnalyze(doc.id)}
+              >
+                {analyzingDocId === doc.id ? 'Analyzing...' : 'Analyze'}
+              </Button>
+              <Button
+                data-testid={`delete-document-${doc.id}`}
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDeleteDocument(doc.id)}
+              >
+                Delete
+              </Button>
+            </div>
+            {expandedAnalysisId === doc.id && doc.id in analysisResults && (
+              <pre
+                data-testid={`analysis-result-${doc.id}`}
+                style={{
+                  background: '#f5f5f5',
+                  padding: '0.75rem',
+                  borderRadius: '4px',
+                  fontSize: '0.8rem',
+                  overflow: 'auto',
+                  maxHeight: '400px',
+                  marginBottom: '0.5rem',
+                  borderBottom: '1px solid #eee',
+                }}
+              >
+                {JSON.stringify(analysisResults[doc.id], null, 2)}
+              </pre>
+            )}
           </li>
         ))}
         {documents.length === 0 && (
@@ -235,5 +310,29 @@ function CaseDetail() {
         )}
       </ul>
     </main>
+  );
+}
+
+const BADGE_COLORS: Record<AnalysisStatus, { background: string; color: string }> = {
+  pending: { background: '#e5e7eb', color: '#374151' },
+  processing: { background: '#fef3c7', color: '#92400e' },
+  completed: { background: '#d1fae5', color: '#065f46' },
+  failed: { background: '#fee2e2', color: '#991b1b' },
+};
+
+function AnalysisStatusBadge({ status }: { status: AnalysisStatus }) {
+  const colors = BADGE_COLORS[status] ?? BADGE_COLORS.pending;
+  return (
+    <span
+      style={{
+        fontSize: '0.75rem',
+        padding: '0.15rem 0.5rem',
+        borderRadius: '9999px',
+        fontWeight: 500,
+        ...colors,
+      }}
+    >
+      {status}
+    </span>
   );
 }
