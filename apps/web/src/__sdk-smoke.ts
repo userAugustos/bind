@@ -3,6 +3,7 @@ import { edenTreaty } from '@elysiajs/eden';
 import type { AnalysisResponse, AnalysisResult, EvidenceItem } from '@bind/api/analysis';
 import type { BindApi } from '@bind/api/client';
 import type { AnalysisStatus, DocumentResponseType, DocumentType } from '@bind/api/documents';
+import type { MemoContent, MemoResponse } from '@bind/api/memo';
 import type { CheckResultItem, PolicyCheckResponse, SummaryCounts } from '@bind/api/policy-check';
 import type {
   ComparisonResult,
@@ -19,3 +20,4 @@ export type { DocumentResponseType, DocumentType, AnalysisStatus };
 export type { AnalysisResponse, AnalysisResult, EvidenceItem };
 export type { PolicyCheckResponse, CheckResultItem, SummaryCounts };
 export type { QuoteComparisonResponse, ComparisonResult, RecommendationSignal };
+export type { MemoContent, MemoResponse };

@@ -97,3 +97,20 @@ export const quoteComparisons = sqliteTable('quote_comparisons', {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
+
+export const proposalMemos = sqliteTable('proposal_memos', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  caseId: text('case_id')
+    .notNull()
+    .references(() => reviewCases.id, { onDelete: 'restrict' }),
+  status: text('status').notNull().default('completed'),
+  content: text('content').notNull(),
+  error: text('error'),
+  modelProvider: text('model_provider').notNull(),
+  modelName: text('model_name').notNull(),
+  createdAt: text('created_at')
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
