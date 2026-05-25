@@ -16,17 +16,18 @@ Branch: `feat/review-case-foundation` — PR #1.
 Branch: `feat/ai-document-analysis` — PR #2 (targets `feat/review-case-foundation`).
 Branch: `feat/policy-check` — PR #3 (targets `feat/ai-document-analysis`).
 Branch: `feat/quote-comparison` — PR #4 (targets `feat/policy-check`).
+Branch: `feat/proposal-memo` — PR #5 (targets `feat/quote-comparison`).
 
 ### Status by feature
 
-| Feature                  | Status      | Notes                                                                                                                                                                                   |
-| ------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Review Case              | Partial     | Metadata CRUD + status state machine done. Not yet linked to downstream feature outputs.                                                                                                |
-| Document Vault           | Partial     | Metadata CRUD done. No PDF upload/storage, no analysis results, several metadata fields deferred.                                                                                       |
-| AI Document Analysis     | Partial     | LLM adapter (Mock + Modal), Zod schemas, analysis CRUD, status state machine, 10 e2e tests, simple testing UI. No PDF upload/conversion, no prompt files, no real Modal deployment yet. |
-| Policy Check             | Partial     | 5 deterministic checks, CRUD, 9 e2e tests, simple UI. No limit_basis comparison, no page evidence enrichment.                                                                           |
-| Quote Comparison         | Partial     | Deterministic engine, recommendation signal, CRUD, 10 e2e tests, simple UI. No multi-run diffing.                                                                                       |
-| Proposal / Decision Memo | Not started | —                                                                                                                                                                                       |
+| Feature                  | Status  | Notes                                                                                                                                                                                   |
+| ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Review Case              | Partial | Metadata CRUD + status state machine done. Not yet linked to downstream feature outputs.                                                                                                |
+| Document Vault           | Partial | Metadata CRUD done. No PDF upload/storage, no analysis results, several metadata fields deferred.                                                                                       |
+| AI Document Analysis     | Partial | LLM adapter (Mock + Modal), Zod schemas, analysis CRUD, status state machine, 10 e2e tests, simple testing UI. No PDF upload/conversion, no prompt files, no real Modal deployment yet. |
+| Policy Check             | Partial | 5 deterministic checks, CRUD, 9 e2e tests, simple UI. No limit_basis comparison, no page evidence enrichment.                                                                           |
+| Quote Comparison         | Partial | Deterministic engine, recommendation signal, CRUD, 10 e2e tests, simple UI. No multi-run diffing.                                                                                       |
+| Proposal / Decision Memo | Partial | LLM-driven memo generation (Mock + Modal), SSE streaming, 8 e2e tests, simple UI. No export PDF.                                                                                        |
 
 ### Iteration 1 — done (PR #1)
 
@@ -176,6 +177,51 @@ Branch: `feat/quote-comparison` — PR #4 (targets `feat/policy-check`).
 
 1. **Next feature to build.** Proposal / Decision Memo — the final LLM-driven feature that turns structured review data into stakeholder-facing prose.
 2. Previous open decisions still apply (re-analysis path, async analysis, PATCH on terminal cases, limit_basis comparison).
+
+### Iteration 5 — done (PR #5)
+
+**Proposal / Decision Memo**
+
+- Table `proposal_memos` with `id`, `case_id` (FK restrict), `status` (completed/failed), `content` (JSON — 5 memo sections), `error`, `model_provider`, `model_name`, `created_at`.
+- LLM-driven generation with provider interface (same pattern as AI Document Analysis):
+  - `MockMemoProvider` — deterministic Northstar scenario memo for tests/dev.
+  - `ModalMemoProvider` — calls Modal Web Function with structured review data.
+- Service orchestration: gathers case metadata + quote comparison results + policy check summaries, builds prompt payload, calls provider, validates with Zod (1 retry), persists.
+- Memo content schema: `executive_summary`, `coverage_gaps`, `quote_comparison`, `recommendation`, `next_steps` (string array).
+- SSE delivery: `GET /cases/:case_id/memo/stream` yields each section as an SSE event with ~3s delay between sections (demo effect). Uses Elysia async generator pattern.
+- Routes: `POST /cases/:case_id/memo` (generate), `GET /cases/:case_id/memo` (latest), `GET /cases/:case_id/memo/stream` (SSE).
+- SDK exports: `@bind/api/memo` (types: MemoContent, MemoResponse).
+- 8 e2e tests covering: generation, content validation, 404/400 errors, regeneration.
+- Simple throwaway UI: Generate/Load buttons, document-style memo display with section cards.
+
+### Deviations from the plan (iteration 5)
+
+- **Module named `memo` not `proposal-memo`.** Shorter, consistent with route path `/cases/:case_id/memo`.
+- **SSE not tested via Eden Treaty.** Eden does not support SSE consumption. The underlying data path is covered by REST endpoint tests.
+- **No "Copy summary" action.** The UI displays memo content but doesn't implement a copy button (trivial to add later).
+
+### All features complete
+
+All 6 planned features are now implemented:
+
+1. Review Case — CRUD + state machine
+2. Document Vault — metadata CRUD
+3. AI Document Analysis — LLM adapter, mock + modal
+4. Policy Check — 5 deterministic requirement checks
+5. Quote Comparison — deterministic engine + recommendation
+6. Proposal / Decision Memo — LLM-driven prose generation + SSE
+
+### Remaining open decisions (accumulated)
+
+1. Re-analysis path (reanalyze event for completed documents)
+2. Async analysis (webhook/polling for Modal latency)
+3. PATCH on terminal cases
+4. Case delete behavior (409 vs cascade)
+5. Limit basis comparison (per occurrence vs aggregate → review verdict)
+6. Evidence page_number enrichment in policy check
+7. Real PDF upload/storage + page-image conversion
+8. Custom requirement sets per case
+9. Production UI (replace throwaway testing UI)
 
 ## Demo Scenario
 
