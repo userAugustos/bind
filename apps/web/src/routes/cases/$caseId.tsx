@@ -53,6 +53,23 @@ interface PolicyCheckResponse {
   created_at: string;
 }
 
+interface MemoResponse {
+  id: string;
+  case_id: string;
+  status: 'completed' | 'failed';
+  content: {
+    executive_summary: string;
+    coverage_gaps: string;
+    quote_comparison: string;
+    recommendation: string;
+    next_steps: string[];
+  } | null;
+  error: string | null;
+  model_provider: string;
+  model_name: string;
+  created_at: string;
+}
+
 interface QuoteComparisonOption {
   target_document_id: string;
   option_name: string;
@@ -106,6 +123,10 @@ function CaseDetail() {
   const [quoteComparisonRunning, setQuoteComparisonRunning] = useState(false);
   const [quoteComparisonResult, setQuoteComparisonResult] =
     useState<QuoteComparisonResponse | null>(null);
+
+  const [memoGenerating, setMemoGenerating] = useState(false);
+  const [memoLoading, setMemoLoading] = useState(false);
+  const [memoResult, setMemoResult] = useState<MemoResponse | null>(null);
 
   async function fetchCase() {
     try {
@@ -291,6 +312,36 @@ function CaseDetail() {
       setActionError(e instanceof Error ? e.message : 'Quote comparison failed');
     } finally {
       setQuoteComparisonRunning(false);
+    }
+  }
+
+  async function handleGenerateMemo() {
+    setMemoGenerating(true);
+    setActionError(null);
+    try {
+      const result = await apiCall<MemoResponse>(() =>
+        bindApi.cases({ case_id: caseId }).memo.post({} as never)
+      );
+      setMemoResult(result);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to generate memo');
+    } finally {
+      setMemoGenerating(false);
+    }
+  }
+
+  async function handleLoadLatestMemo() {
+    setMemoLoading(true);
+    setActionError(null);
+    try {
+      const result = await apiCall<MemoResponse>(() =>
+        bindApi.cases({ case_id: caseId }).memo.get()
+      );
+      setMemoResult(result);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to load memo');
+    } finally {
+      setMemoLoading(false);
     }
   }
 
@@ -674,6 +725,95 @@ function CaseDetail() {
           </div>
         )}
       </div>
+
+      <hr style={{ margin: '1.5rem 0' }} />
+
+      <div data-testid="proposal-memo-section">
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}
+        >
+          <h2 style={{ margin: 0 }}>Proposal Memo</h2>
+          <Button
+            data-testid="generate-memo"
+            disabled={!quoteComparisonResult || memoGenerating}
+            onClick={handleGenerateMemo}
+          >
+            {memoGenerating ? 'Generating...' : 'Generate Memo'}
+          </Button>
+          <Button
+            data-testid="load-latest-memo"
+            variant="outline"
+            disabled={memoLoading}
+            onClick={handleLoadLatestMemo}
+          >
+            {memoLoading ? 'Loading...' : 'Load Latest'}
+          </Button>
+        </div>
+
+        {!quoteComparisonResult && (
+          <p data-testid="memo-prereq-message" style={{ fontSize: '0.85rem', color: '#666' }}>
+            Run a quote comparison first before generating a proposal memo.
+          </p>
+        )}
+
+        {memoResult && (
+          <div data-testid="memo-results">
+            {memoResult.status === 'failed' && (
+              <p style={{ color: 'red', fontSize: '0.85rem' }}>
+                Memo generation failed: {memoResult.error ?? 'Unknown error'}
+              </p>
+            )}
+
+            {memoResult.status === 'completed' && memoResult.content && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <MemoSection
+                  testId="memo-executive-summary"
+                  title="Executive Summary"
+                  content={memoResult.content.executive_summary}
+                />
+                <MemoSection
+                  testId="memo-coverage-gaps"
+                  title="Coverage Gaps"
+                  content={memoResult.content.coverage_gaps}
+                />
+                <MemoSection
+                  testId="memo-quote-comparison"
+                  title="Quote Comparison"
+                  content={memoResult.content.quote_comparison}
+                />
+                <MemoSection
+                  testId="memo-recommendation"
+                  title="Recommendation"
+                  content={memoResult.content.recommendation}
+                />
+                <div
+                  data-testid="memo-next-steps"
+                  style={{
+                    padding: '0.75rem 1rem',
+                    background: '#f9fafb',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <h3 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>Next Steps</h3>
+                  <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
+                    {memoResult.content.next_steps.map((step, i) => (
+                      <li key={i} style={{ marginBottom: '0.25rem' }}>
+                        {step}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <p style={{ fontSize: '0.75rem', color: '#999', margin: 0 }}>
+                  Generated by {memoResult.model_provider}/{memoResult.model_name} at{' '}
+                  {new Date(memoResult.created_at).toLocaleString()}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </main>
   );
 }
@@ -895,6 +1035,33 @@ function QuoteOptionCard({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function MemoSection({
+  testId,
+  title,
+  content,
+}: {
+  testId: string;
+  title: string;
+  content: string;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      style={{
+        padding: '0.75rem 1rem',
+        background: '#f9fafb',
+        border: '1px solid #e5e7eb',
+        borderRadius: '6px',
+      }}
+    >
+      <h3 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>{title}</h3>
+      <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+        {content}
+      </p>
     </div>
   );
 }
